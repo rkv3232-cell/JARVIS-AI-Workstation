@@ -1,0 +1,29 @@
+{
+  "id": "coding_specialist",
+  "name": "Python & Systems Coding Specialist",
+  "version": "1.0.0",
+  "type": "script_enabled",
+  "description": "Performs static syntax verification, AST complexity inspection, defect scanning, and code quality audits.",
+  "author": "JARVIS APEX Core",
+  "entrypoint": "scripts/main.py",
+  "permissions_required": [
+    "skills:coding_specialist:EXECUTE",
+    "files:safe_paths:READ"
+  ],
+  "parameters_schema": {
+    "code": "string (optional source code to analyze)",
+    "file_path": "string (optional path to python file)",
+    "check_security": "boolean (default: true)"
+  },
+  "returns_schema": {
+    "status": "string (SUCCESS or ERROR)",
+    "valid_syntax": "boolean",
+    "lines_of_code": "integer",
+    "functions_count": "integer",
+    "classes_count": "integer",
+    "issues": "array of strings",
+    "summary": "string"
+  },
+  "tags": ["coding", "python", "ast", "linting", "quality"],
+  "is_enabled": true
+}

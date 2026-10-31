@@ -79,6 +79,13 @@
     <!-- Navigation Tab Bar -->
     <nav class="sub-nav-tabs">
       <button class="nav-tab-btn active" data-tab="tab-command">🖥️ Command Center</button>
+      <button class="nav-tab-btn" data-tab="tab-browser">🌐 Browser</button>
+      <button class="nav-tab-btn" data-tab="tab-skills">⚡ Skills</button>
+      <button class="nav-tab-btn" data-tab="tab-skill-manager">🧰 Skill Manager</button>
+      <button class="nav-tab-btn" data-tab="tab-permissions">🛡️ Permissions</button>
+      <button class="nav-tab-btn" data-tab="tab-collaboration">🤝 Collaboration</button>
+      <button class="nav-tab-btn" data-tab="tab-activity-log">📜 Activity Log</button>
+      <button class="nav-tab-btn" data-tab="tab-memory-timeline">⏳ Memory Timeline</button>
       <button class="nav-tab-btn" data-tab="tab-health">🩺 Health Center</button>
       <button class="nav-tab-btn" data-tab="tab-models">⚡ AI Providers</button>
       <button class="nav-tab-btn" data-tab="tab-strategy">📈 Strategy Lab</button>
@@ -588,6 +595,573 @@
           <div id="audit-log-content" class="table-container">
             <div class="loading-state">Loading audit events...</div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- TAB: BROWSER (Component 1 — AI Browser Operator) -->
+    <!-- ================================================================= -->
+    <div class="tab-view" id="tab-browser">
+      <div class="browser-container glass-card">
+        <!-- Top Toolbar -->
+        <div class="browser-toolbar">
+          <div class="browser-nav-group">
+            <button class="br-btn" id="br-back-btn" title="Back">⮜</button>
+            <button class="br-btn" id="br-forward-btn" title="Forward">⮞</button>
+            <button class="br-btn" id="br-reload-btn" title="Reload">↻</button>
+            <button class="br-btn" id="br-home-btn" title="Home">🏠</button>
+          </div>
+          <div class="browser-url-bar">
+            <span class="url-protocol-badge">🔒 HTTPS</span>
+            <input type="text" id="br-url-input" class="br-url-input" placeholder="Enter URL (e.g. https://en.wikipedia.org or https://news.ycombinator.com)...">
+            <button class="br-action-btn primary-btn" id="br-go-btn">Go</button>
+          </div>
+          <div class="browser-tools-group">
+            <input type="text" id="br-search-input" class="br-search-input" placeholder="Find in page...">
+            <button class="br-btn" id="br-search-btn" title="Search In Page">🔍</button>
+            <button class="br-btn" id="br-bookmark-btn" title="Add Bookmark">⭐</button>
+            <button class="br-btn danger-pulse-btn" id="br-stop-btn" title="Emergency Stop Automation">🛑 STOP</button>
+          </div>
+        </div>
+
+        <!-- Tab Strip -->
+        <div class="browser-tabs-strip" id="br-tab-strip">
+          <div class="br-tab-item active" data-tab-id="default">
+            <span class="br-tab-title">New Tab</span>
+            <button class="br-tab-close">×</button>
+          </div>
+          <button class="br-new-tab-btn" id="br-new-tab-btn">+ New Tab</button>
+        </div>
+
+        <!-- Main Workspace: Viewport & AI Operator Assistant Sidebar -->
+        <div class="browser-workspace-grid">
+          <!-- Left: Viewport / Scraped DOM View -->
+          <div class="browser-viewport-panel glass-card">
+            <div class="viewport-header">
+              <div class="viewport-title-box">
+                <span class="pulse-dot green"></span>
+                <span id="br-viewport-title" class="viewport-title">Blank Page</span>
+              </div>
+              <div class="viewport-mode-toggle">
+                <button class="sub-tab-btn active" id="br-view-screenshot-btn">📸 Live Snapshot</button>
+                <button class="sub-tab-btn" id="br-view-dom-btn">📝 Clean DOM Text</button>
+              </div>
+            </div>
+
+            <div class="viewport-canvas-container" id="br-canvas-container">
+              <div class="browser-screenshot-wrapper" id="br-screenshot-wrapper">
+                <div class="browser-placeholder-state" id="br-placeholder-msg">
+                  <span class="placeholder-icon">🌐</span>
+                  <h3>J.A.R.V.I.S. Multi-Tab AI Browser Operator</h3>
+                  <p>Enter any URL above or click an AI action to inspect, scrape, and extract intelligence.</p>
+                </div>
+                <img id="br-screenshot-img" class="browser-screenshot-img" src="" alt="Browser Viewport" style="display:none;">
+              </div>
+              <pre id="br-dom-text" class="browser-dom-pre" style="display:none;"></pre>
+            </div>
+          </div>
+
+          <!-- Right: AI Browser Intelligence Suite -->
+          <div class="browser-ai-sidebar glass-card">
+            <div class="ai-sidebar-header">
+              <span class="panel-icon">⚡</span>
+              <h3>AI BROWSER OPERATOR</h3>
+            </div>
+
+            <!-- Action 1: Summarize Page -->
+            <div class="ai-operator-card">
+              <div class="operator-card-header">
+                <strong>📄 Page Intelligence Summary</strong>
+                <button class="action-btn-sm" id="br-ai-summarize-btn">⚡ Summarize</button>
+              </div>
+              <div id="br-summary-output" class="ai-op-output-box">
+                <span class="dim-text">Click Summarize to extract core takeaways from current page.</span>
+              </div>
+            </div>
+
+            <!-- Action 2: Grounded Q&A -->
+            <div class="ai-operator-card">
+              <div class="operator-card-header">
+                <strong>💬 Grounded Q&A Against DOM</strong>
+              </div>
+              <div class="qa-input-row">
+                <input type="text" id="br-qa-input" class="modern-input" placeholder="Ask anything grounded in this page...">
+                <button class="action-btn-sm primary-btn" id="br-qa-btn">Ask</button>
+              </div>
+              <div id="br-qa-output" class="ai-op-output-box">
+                <span class="dim-text">Answers are strictly grounded in active page facts.</span>
+              </div>
+            </div>
+
+            <!-- Action 3: Table Scraper -->
+            <div class="ai-operator-card">
+              <div class="operator-card-header">
+                <strong>📊 Table & Data Scraper</strong>
+                <button class="action-btn-sm" id="br-extract-tables-btn">Extract Tables</button>
+              </div>
+              <div id="br-tables-output" class="ai-op-output-box">
+                <span class="dim-text">Scrapes HTML tables into structured JSON.</span>
+              </div>
+            </div>
+
+            <!-- Action 4: Research Dossier PDF -->
+            <div class="ai-operator-card">
+              <div class="operator-card-header">
+                <strong>📑 Compile Research PDF Report</strong>
+                <button class="action-btn-sm primary-btn" id="br-gen-report-btn">Generate PDF</button>
+              </div>
+              <div id="br-report-output" class="ai-op-output-box">
+                <span class="dim-text">Generates publication-ready PDF with direct source citations.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom Drawer: Bookmarks & History -->
+        <div class="browser-drawer glass-card">
+          <div class="drawer-tabs">
+            <button class="sub-tab-btn active" id="drawer-tab-bm">⭐ Bookmarks (<span id="br-bm-count">0</span>)</button>
+            <button class="sub-tab-btn" id="drawer-tab-hist">🕒 History (<span id="br-hist-count">0</span>)</button>
+          </div>
+          <div class="drawer-content" id="drawer-content-box">
+            <div id="br-bookmarks-view" class="drawer-list"></div>
+            <div id="br-history-view" class="drawer-list" style="display:none;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- TAB: SKILLS (Component 2 — Skills System) -->
+    <!-- ================================================================= -->
+    <div class="tab-view" id="tab-skills">
+      <div class="skills-container glass-card">
+        <div class="panel-header">
+          <div class="header-title">
+            <span class="panel-icon">⚡</span>
+            <h2>MODULAR SKILLS SYSTEM</h2>
+          </div>
+          <div class="skills-filter-group">
+            <button class="sub-tab-btn active" data-skill-filter="all">All Skills</button>
+            <button class="sub-tab-btn" data-skill-filter="script_enabled">Script-Enabled</button>
+            <button class="sub-tab-btn" data-skill-filter="instruction_only">Instruction-Only</button>
+            <button class="sub-tab-btn" data-skill-filter="tool_based">Tool-Based</button>
+            <input type="text" id="skills-search-input" class="modern-input" placeholder="Search skills by name or tag..." style="width:220px;">
+            <button class="action-btn-sm" id="skills-rescan-btn">🔄 Rescan</button>
+          </div>
+        </div>
+
+        <!-- Main Skills Grid & Execution Panel -->
+        <div class="skills-layout-grid">
+          <div class="skills-cards-column" id="skills-cards-grid">
+            <div class="loading-state">Loading installed skills...</div>
+          </div>
+
+          <div class="skills-execution-column glass-card" id="skills-exec-panel">
+            <div class="exec-panel-header">
+              <h3 id="exec-panel-title">Skill Execution Console</h3>
+              <span id="exec-panel-badge" class="badge-pill">SELECT A SKILL</span>
+            </div>
+            <p id="exec-panel-desc" class="dim-text" style="margin-bottom:12px;">Choose a skill on the left to configure parameters and execute.</p>
+            
+            <div class="param-box">
+              <label class="input-label">Execution Parameters (JSON):</label>
+              <textarea id="skills-param-input" class="code-textarea" rows="6" placeholder="{\n  \"param\": \"value\"\n}"></textarea>
+            </div>
+            
+            <div class="exec-btn-row">
+              <button class="action-btn primary-btn" id="skills-run-btn" disabled>▶️ Run Skill</button>
+              <button class="action-btn" id="skills-view-doc-btn" disabled>📖 View SKILL.md</button>
+            </div>
+
+            <div class="exec-output-section">
+              <div class="output-header-row">
+                <label class="input-label">Output & Telemetry:</label>
+                <span id="exec-status-tag" class="status-tag idle">IDLE</span>
+              </div>
+              <pre id="skills-exec-result" class="code-output-pre">Ready for execution.</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- TAB: SKILL MANAGER (Component 3 — Skill Manager) -->
+    <!-- ================================================================= -->
+    <div class="tab-view" id="tab-skill-manager">
+      <div class="skill-manager-container glass-card">
+        <div class="panel-header">
+          <div class="header-title">
+            <span class="panel-icon">🧰</span>
+            <h2>SKILL LIFECYCLE & REGISTRY MANAGER</h2>
+          </div>
+          <div class="skmgr-actions">
+            <input type="text" id="skmgr-path-input" class="modern-input" placeholder="Path to local skill folder..." style="width:320px;">
+            <button class="action-btn primary-btn" id="skmgr-install-btn">📦 Install Skill</button>
+          </div>
+        </div>
+
+        <!-- Installed Skills Table -->
+        <div class="glass-card" style="margin-bottom:20px;">
+          <h3>Installed Skills Directory</h3>
+          <div class="table-container">
+            <table class="modern-table">
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Skill ID</th>
+                  <th>Name</th>
+                  <th>Type</th>
+                  <th>Version</th>
+                  <th>Permissions Required</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="skmgr-table-body">
+                <tr><td colspan="7" class="loading-state">Loading registry...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Execution History Table -->
+        <div class="glass-card">
+          <h3>Skill Execution Audit History</h3>
+          <div class="table-container">
+            <table class="modern-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Skill ID</th>
+                  <th>Duration</th>
+                  <th>Status</th>
+                  <th>Output / Error</th>
+                </tr>
+              </thead>
+              <tbody id="skmgr-history-body">
+                <tr><td colspan="5" class="loading-state">Loading execution history...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- TAB: PERMISSIONS (Component 4 — Central Permission Manager) -->
+    <!-- ================================================================= -->
+    <div class="tab-view" id="tab-permissions">
+      <div class="permissions-container glass-card">
+        <div class="panel-header">
+          <div class="header-title">
+            <span class="panel-icon">🛡️</span>
+            <h2>CENTRAL PERMISSION & AUTHORIZATION MANAGER</h2>
+          </div>
+        </div>
+
+        <!-- Pending Interactive Approvals -->
+        <div class="glass-card" id="perm-pending-section" style="margin-bottom:20px; border-left:4px solid #f59e0b;">
+          <h3>⚠️ Pending Interactive Authorizations</h3>
+          <div id="perm-pending-container" class="pending-approvals-list">
+            <p class="dim-text">No pending actions waiting for user confirmation.</p>
+          </div>
+        </div>
+
+        <!-- Grant New Permission Form & Active Grants -->
+        <div class="permissions-split-grid">
+          <!-- Left: Grant Form -->
+          <div class="glass-card">
+            <h3>Grant Permission Authority</h3>
+            <form id="perm-grant-form" onsubmit="return false;" style="display:flex; flex-direction:column; gap:12px; margin-top:12px;">
+              <div>
+                <label class="input-label">Component:</label>
+                <select id="perm-new-comp" class="modern-select">
+                  <option value="browser">Browser</option>
+                  <option value="skills">Skills</option>
+                  <option value="files">Files</option>
+                  <option value="memory">Memory</option>
+                  <option value="os">OS Subsystem</option>
+                  <option value="automation">Automation</option>
+                  <option value="collaboration">Collaboration</option>
+                </select>
+              </div>
+              <div>
+                <label class="input-label">Target Resource (e.g. coding_specialist or *):</label>
+                <input type="text" id="perm-new-res" class="modern-input" placeholder="Resource name or wildcard *" required>
+              </div>
+              <div>
+                <label class="input-label">Permission Level:</label>
+                <select id="perm-new-level" class="modern-select">
+                  <option value="READ">READ (Inspection / Safe)</option>
+                  <option value="WRITE">WRITE (Data Mutation)</option>
+                  <option value="EXECUTE" selected>EXECUTE (Process / Script Run)</option>
+                  <option value="SENSITIVE">SENSITIVE (High-Impact / Confirmations)</option>
+                </select>
+              </div>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <input type="checkbox" id="perm-new-persist" checked>
+                <label for="perm-new-persist" class="input-label" style="margin:0;">Persistent Grant (Stored in SQLite)</label>
+              </div>
+              <div>
+                <label class="input-label">Notes / Justification:</label>
+                <input type="text" id="perm-new-notes" class="modern-input" placeholder="Reason for authorization...">
+              </div>
+              <button class="action-btn primary-btn" id="perm-grant-submit-btn">Grant Authorization</button>
+            </form>
+          </div>
+
+          <!-- Right: Active Grants Table -->
+          <div class="glass-card">
+            <h3>Active Grants Registry</h3>
+            <div class="table-container">
+              <table class="modern-table">
+                <thead>
+                  <tr>
+                    <th>Component</th>
+                    <th>Resource</th>
+                    <th>Level</th>
+                    <th>Persistence</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="perm-grants-body">
+                  <tr><td colspan="5" class="loading-state">Loading active grants...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- TAB: COLLABORATION (Component 5 — Skill Collaboration Engine) -->
+    <!-- ================================================================= -->
+    <div class="tab-view" id="tab-collaboration">
+      <div class="collaboration-container glass-card">
+        <div class="panel-header">
+          <div class="header-title">
+            <span class="panel-icon">🤝</span>
+            <h2>MULTI-SKILL TASK COLLABORATION</h2>
+          </div>
+        </div>
+
+        <!-- Task Planner Card -->
+        <div class="glass-card" style="margin-bottom:20px;">
+          <h3>Plan Collaborative Objective</h3>
+          <div class="collab-input-row" style="display:flex; gap:10px; margin-top:10px;">
+            <input type="text" id="collab-objective-input" class="modern-input" placeholder="Describe multi-skill goal (e.g. Research Quantum Computing trends, analyze market series, and generate PDF report)..." style="flex:1;">
+            <button class="action-btn primary-btn" id="collab-plan-btn">🎯 Generate Plan</button>
+          </div>
+        </div>
+
+        <!-- Interactive Pipeline Execution Monitor -->
+        <div class="glass-card" style="margin-bottom:20px;">
+          <div class="pipeline-header-row" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <div>
+              <h3 id="collab-active-task-title">Execution Pipeline: No Active Task</h3>
+              <span id="collab-active-task-status" class="status-tag idle">IDLE</span>
+            </div>
+            <div class="pipeline-controls" style="display:flex; gap:8px;">
+              <button class="action-btn buy-btn" id="collab-start-btn" disabled>▶️ Start</button>
+              <button class="action-btn" id="collab-pause-btn" disabled>⏸️ Pause</button>
+              <button class="action-btn" id="collab-resume-btn" disabled>▶️ Resume</button>
+              <button class="action-btn danger-btn" id="collab-cancel-btn" disabled>⏹️ Cancel</button>
+            </div>
+          </div>
+
+          <!-- Visual Step Pipeline -->
+          <div class="collab-step-track" id="collab-step-track">
+            <p class="dim-text">Plan a task above to visualize the multi-skill pipeline.</p>
+          </div>
+
+          <!-- Step Execution Stream -->
+          <div style="margin-top:15px;">
+            <label class="input-label">Real-Time Step Output Stream:</label>
+            <pre id="collab-stream-output" class="code-output-pre">Awaiting pipeline execution.</pre>
+          </div>
+        </div>
+
+        <!-- Past Collaboration Tasks History -->
+        <div class="glass-card">
+          <h3>Past Collaborative Task Runs</h3>
+          <div class="table-container">
+            <table class="modern-table">
+              <thead>
+                <tr>
+                  <th>Task ID</th>
+                  <th>Objective</th>
+                  <th>Steps</th>
+                  <th>Status</th>
+                  <th>Created At</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="collab-tasks-table">
+                <tr><td colspan="6" class="loading-state">Loading tasks...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- TAB: ACTIVITY LOG (Component 6 — Unified Activity Log) -->
+    <!-- ================================================================= -->
+    <div class="tab-view" id="tab-activity-log">
+      <div class="activity-log-container glass-card">
+        <div class="panel-header">
+          <div class="header-title">
+            <span class="panel-icon">📜</span>
+            <h2>UNIFIED ACTIVITY & AUDIT TRAIL</h2>
+          </div>
+          <div class="act-export-group" style="display:flex; gap:8px;">
+            <button class="action-btn" id="act-export-json-btn">📥 Export JSON</button>
+            <button class="action-btn" id="act-export-csv-btn">📥 Export CSV</button>
+            <button class="action-btn danger-btn" id="act-clear-btn">🗑️ Clear Logs</button>
+          </div>
+        </div>
+
+        <!-- KPI Metrics Strip -->
+        <div class="act-kpi-strip" id="act-kpi-strip">
+          <div class="kpi-card glass-card">
+            <span class="kpi-label">TOTAL ACTIVITIES</span>
+            <span class="kpi-val cyan" id="act-kpi-total">0</span>
+          </div>
+          <div class="kpi-card glass-card">
+            <span class="kpi-label">BROWSER OPS</span>
+            <span class="kpi-val" id="act-kpi-browser">0</span>
+          </div>
+          <div class="kpi-card glass-card">
+            <span class="kpi-label">SKILL EXECUTIONS</span>
+            <span class="kpi-val green" id="act-kpi-skills">0</span>
+          </div>
+          <div class="kpi-card glass-card">
+            <span class="kpi-label">PERMISSIONS</span>
+            <span class="kpi-val" id="act-kpi-perm">0</span>
+          </div>
+          <div class="kpi-card glass-card">
+            <span class="kpi-label">SYSTEM & OS</span>
+            <span class="kpi-val purple" id="act-kpi-os">0</span>
+          </div>
+        </div>
+
+        <!-- Filter & Search Toolbar -->
+        <div class="act-filter-toolbar glass-card" style="margin:15px 0;">
+          <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+            <div>
+              <label class="input-label">Component:</label>
+              <select id="act-filter-comp" class="modern-select">
+                <option value="all">All Components</option>
+                <option value="browser">Browser</option>
+                <option value="skills">Skills</option>
+                <option value="permissions">Permissions</option>
+                <option value="collaboration">Collaboration</option>
+                <option value="memory">Memory</option>
+                <option value="os">OS</option>
+                <option value="system">System</option>
+              </select>
+            </div>
+            <div>
+              <label class="input-label">Execution Status:</label>
+              <select id="act-filter-status" class="modern-select">
+                <option value="all">All Statuses</option>
+                <option value="SUCCESS">SUCCESS</option>
+                <option value="FAILED">FAILED</option>
+                <option value="PENDING">PENDING</option>
+                <option value="DENIED">DENIED</option>
+              </select>
+            </div>
+            <div style="flex:1;">
+              <label class="input-label">Search Activity:</label>
+              <input type="text" id="act-filter-search" class="modern-input" placeholder="Search by action, resource, or result...">
+            </div>
+            <button class="action-btn primary-btn" id="act-filter-apply-btn" style="margin-top:16px;">Apply Filters</button>
+          </div>
+        </div>
+
+        <!-- Activity Logs Table -->
+        <div class="table-container">
+          <table class="modern-table">
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Component</th>
+                <th>Action</th>
+                <th>Resource</th>
+                <th>Approval</th>
+                <th>Status</th>
+                <th>Summary</th>
+              </tr>
+            </thead>
+            <tbody id="act-table-body">
+              <tr><td colspan="7" class="loading-state">Loading activity trail...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- TAB: MEMORY TIMELINE (Component 7 — Memory Timeline) -->
+    <!-- ================================================================= -->
+    <div class="tab-view" id="tab-memory-timeline">
+      <div class="memory-timeline-container glass-card">
+        <div class="panel-header">
+          <div class="header-title">
+            <span class="panel-icon">⏳</span>
+            <h2>CHRONOLOGICAL MEMORY TIMELINE & PRIVACY</h2>
+          </div>
+          <button class="action-btn primary-btn" id="mem-add-modal-btn">+ Add Knowledge Node</button>
+        </div>
+
+        <!-- Privacy Controls Strip -->
+        <div class="glass-card" style="margin-bottom:20px; display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:15px;">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <label class="input-label" style="margin:0;">Knowledge Recording:</label>
+            <button class="action-btn-sm buy-btn" id="mem-recording-toggle">RECORDING: ON</button>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <label class="input-label" style="margin:0;">Bulk Wipe Category:</label>
+            <select id="mem-purge-cat-select" class="modern-select">
+              <option value="conversation_history">Conversation History</option>
+              <option value="user_preferences">User Preferences</option>
+              <option value="research_knowledge">Research Knowledge</option>
+              <option value="trading_journal">Trading Journal</option>
+              <option value="project_memory">Project Memory</option>
+            </select>
+            <button class="action-btn-sm danger-btn" id="mem-purge-cat-btn">Purge Category</button>
+          </div>
+        </div>
+
+        <!-- Timeline Filters & Feed -->
+        <div class="timeline-filters-row glass-card" style="margin-bottom:15px; display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+          <select id="mem-filter-cat" class="modern-select">
+            <option value="all">All Categories</option>
+            <option value="conversation_history">Conversation History</option>
+            <option value="user_preferences">User Preferences</option>
+            <option value="research_knowledge">Research Knowledge</option>
+            <option value="project_memory">Project Memory</option>
+            <option value="trading_journal">Trading Journal</option>
+          </select>
+          <select id="mem-filter-source" class="modern-select">
+            <option value="all">All Sources</option>
+            <option value="conversation">Conversation</option>
+            <option value="document">Document</option>
+            <option value="browser_research">Browser Research</option>
+            <option value="explicit_instruction">Explicit Instruction</option>
+            <option value="system_observation">System Observation</option>
+          </select>
+          <input type="text" id="mem-search-input" class="modern-input" placeholder="Search memory text or tags..." style="flex:1;">
+          <button class="action-btn primary-btn" id="mem-search-btn">Search</button>
+        </div>
+
+        <!-- Chronological Feed -->
+        <div class="memory-timeline-feed" id="mem-timeline-feed">
+          <div class="loading-state">Loading chronological memory timeline...</div>
         </div>
       </div>
     </div>

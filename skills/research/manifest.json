@@ -1,0 +1,27 @@
+{
+  "id": "deep_researcher",
+  "name": "Deep Research & Web Intelligence Analyst",
+  "version": "1.0.0",
+  "type": "script_enabled",
+  "description": "Synthesizes multi-source intelligence, validates claims, extracts key takeaways, and compiles structured findings.",
+  "author": "JARVIS APEX Core",
+  "entrypoint": "scripts/main.py",
+  "permissions_required": [
+    "skills:deep_researcher:EXECUTE",
+    "browser:navigation:READ"
+  ],
+  "parameters_schema": {
+    "topic": "string (research subject)",
+    "depth": "string (quick, standard, deep)",
+    "focus_areas": "array of strings"
+  },
+  "returns_schema": {
+    "status": "string",
+    "topic": "string",
+    "key_findings": "array of strings",
+    "summary": "string",
+    "sources": "array of objects"
+  },
+  "tags": ["research", "intelligence", "synthesis", "web"],
+  "is_enabled": true
+}

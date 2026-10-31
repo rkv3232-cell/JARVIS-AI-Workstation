@@ -61,6 +61,9 @@ from .trading.trading_psychology import TradingPsychologyEngine
 from .memory.memory_brain import PersistentMemoryBrain, MemoryCategory
 from .workflows.workflow_engine import WorkflowEngine
 from .auto_updater import SecureAutoUpdater
+from .db_initializer import init_seven_components_db
+from .skills import SkillRegistry
+from .routers_seven_components import router as seven_components_router
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
@@ -173,6 +176,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"[Lifespan] Workflow scheduler initialization notice: {e}")
 
+    # Initialize 7 core components database and sync skills
+    try:
+        init_seven_components_db()
+        SkillRegistry.sync_with_filesystem()
+    except Exception as e:
+        print(f"[Lifespan] 7 Components initialization notice: {e}")
+
     yield
 
     # Clean shutdown
@@ -212,6 +222,9 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+# 7 Core Architecture Components Router
+app.include_router(seven_components_router)
 
 # Centralized Uniform Exception Handlers
 @app.exception_handler(HTTPException)

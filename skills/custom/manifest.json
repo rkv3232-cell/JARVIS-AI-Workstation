@@ -1,0 +1,22 @@
+{
+  "id": "custom_automation",
+  "name": "Custom User Automation & Script Template",
+  "version": "1.0.0",
+  "type": "instruction_only",
+  "description": "Custom user extension template for creating proprietary automation procedures and custom skill plugins.",
+  "author": "User / J.A.R.V.I.S.",
+  "permissions_required": [
+    "skills:custom_automation:EXECUTE"
+  ],
+  "parameters_schema": {
+    "action": "string",
+    "payload": "object"
+  },
+  "returns_schema": {
+    "instruction": "string",
+    "description": "string",
+    "parameters_echo": "object"
+  },
+  "tags": ["custom", "template", "user", "automation"],
+  "is_enabled": true
+}

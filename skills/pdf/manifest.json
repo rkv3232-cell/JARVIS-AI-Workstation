@@ -1,0 +1,29 @@
+{
+  "id": "pdf_generator",
+  "name": "Compact Publication-Grade PDF Generator",
+  "version": "1.0.0",
+  "type": "script_enabled",
+  "description": "Renders ultra-compact, high-density, professional PDF reports with clean typography and zero excessive whitespace.",
+  "author": "JARVIS APEX Core",
+  "entrypoint": "scripts/main.py",
+  "permissions_required": [
+    "skills:pdf_generator:EXECUTE",
+    "files:reports:WRITE"
+  ],
+  "parameters_schema": {
+    "title": "string (report title)",
+    "subtitle": "string (optional subtitle)",
+    "sections": "array of objects with {heading, content, table_data}",
+    "author": "string (default: J.A.R.V.I.S. Research)"
+  },
+  "returns_schema": {
+    "status": "string",
+    "pdf_filename": "string",
+    "pdf_path": "string",
+    "pdf_url": "string",
+    "page_count": "integer",
+    "size_bytes": "integer"
+  },
+  "tags": ["pdf", "report", "compact", "publication", "formatting"],
+  "is_enabled": true
+}

@@ -1,0 +1,9 @@
+{
+  "parameters": {
+    "action": "trigger_custom_pipeline",
+    "payload": {
+      "strategy": "mean_reversion",
+      "symbols": ["NIFTY50"]
+    }
+  }
+}

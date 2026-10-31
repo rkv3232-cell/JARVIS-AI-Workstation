@@ -279,6 +279,7 @@ class JarvisClient {
     this.initMemoryBrain();
     this.initWorkflowStudio();
     this.initSecurityAndUpdater();
+    this.initSevenComponentsListeners();
 
     // Lock window position to origin (0, 0) so top navbar never scrolls off-screen
     window.scrollTo(0, 0);
@@ -2415,6 +2416,13 @@ class JarvisClient {
         else if (tabId === "tab-memory") this.fetchMemoryList();
         else if (tabId === "tab-workflows") this.fetchWorkflows();
         else if (tabId === "tab-security") this.fetchAuditLogs();
+        else if (tabId === "tab-browser") this.initBrowserOperator();
+        else if (tabId === "tab-skills") this.fetchSkills();
+        else if (tabId === "tab-skill-manager") this.fetchSkillManager();
+        else if (tabId === "tab-permissions") this.fetchPermissions();
+        else if (tabId === "tab-collaboration") this.fetchCollaboration();
+        else if (tabId === "tab-activity-log") this.fetchActivityLogs();
+        else if (tabId === "tab-memory-timeline") this.fetchMemoryTimeline();
       });
     });
   }
@@ -3167,6 +3175,1157 @@ Update Available: ${res.update_available ? 'Yes (' + res.remote_version + ')' : 
       `;
     } catch (e) {
       container.innerHTML = `<div class="error-msg">Failed to load audit logs: ${e}</div>`;
+    }
+  }
+
+  // =========================================================================
+  // 7 CORE ARCHITECTURE COMPONENTS INTEGRATION CONTROLLERS
+  // =========================================================================
+  initSevenComponentsListeners() {
+    // 1. Browser Event Listeners
+    const goBtn = document.getElementById("br-go-btn");
+    const urlInput = document.getElementById("br-url-input");
+    if (goBtn && urlInput) {
+      goBtn.onclick = () => this.navigateBrowser(urlInput.value);
+      urlInput.onkeydown = (e) => { if (e.key === "Enter") this.navigateBrowser(urlInput.value); };
+    }
+    document.getElementById("br-back-btn")?.addEventListener("click", () => this.performBrowserAction("back"));
+    document.getElementById("br-forward-btn")?.addEventListener("click", () => this.performBrowserAction("forward"));
+    document.getElementById("br-reload-btn")?.addEventListener("click", () => this.performBrowserAction("reload"));
+    document.getElementById("br-home-btn")?.addEventListener("click", () => this.performBrowserAction("home"));
+    document.getElementById("br-search-btn")?.addEventListener("click", () => {
+      const q = document.getElementById("br-search-input")?.value;
+      if (q) this.performBrowserAction("search", { query: q });
+    });
+    document.getElementById("br-bookmark-btn")?.addEventListener("click", () => this.addBrowserBookmark());
+    document.getElementById("br-stop-btn")?.addEventListener("click", async () => {
+      await fetch("/api/browser/stop", { method: "POST" });
+      alert("🛑 Emergency stop triggered. All automated browser actions halted.");
+    });
+    document.getElementById("br-new-tab-btn")?.addEventListener("click", () => this.openNewBrowserTab());
+    document.getElementById("br-view-screenshot-btn")?.addEventListener("click", () => {
+      document.getElementById("br-screenshot-wrapper").style.display = "block";
+      document.getElementById("br-dom-text").style.display = "none";
+      document.getElementById("br-view-screenshot-btn").classList.add("active");
+      document.getElementById("br-view-dom-btn").classList.remove("active");
+    });
+    document.getElementById("br-view-dom-btn")?.addEventListener("click", () => {
+      document.getElementById("br-screenshot-wrapper").style.display = "none";
+      document.getElementById("br-dom-text").style.display = "block";
+      document.getElementById("br-view-dom-btn").classList.add("active");
+      document.getElementById("br-view-screenshot-btn").classList.remove("active");
+    });
+    document.getElementById("br-ai-summarize-btn")?.addEventListener("click", () => this.aiSummarizePage());
+    document.getElementById("br-qa-btn")?.addEventListener("click", () => {
+      const q = document.getElementById("br-qa-input")?.value;
+      if (q) this.aiGroundedQA(q);
+    });
+    document.getElementById("br-extract-tables-btn")?.addEventListener("click", () => this.aiExtractTables());
+    document.getElementById("br-gen-report-btn")?.addEventListener("click", () => this.aiGenerateReport());
+    document.getElementById("drawer-tab-bm")?.addEventListener("click", () => {
+      document.getElementById("br-bookmarks-view").style.display = "flex";
+      document.getElementById("br-history-view").style.display = "none";
+      document.getElementById("drawer-tab-bm").classList.add("active");
+      document.getElementById("drawer-tab-hist").classList.remove("active");
+      this.fetchBrowserBookmarks();
+    });
+    document.getElementById("drawer-tab-hist")?.addEventListener("click", () => {
+      document.getElementById("br-bookmarks-view").style.display = "none";
+      document.getElementById("br-history-view").style.display = "flex";
+      document.getElementById("drawer-tab-hist").classList.add("active");
+      document.getElementById("drawer-tab-bm").classList.remove("active");
+      this.fetchBrowserHistory();
+    });
+
+    // 2. Skills Listeners
+    document.querySelectorAll("[data-skill-filter]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("[data-skill-filter]").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        this.fetchSkills(btn.getAttribute("data-skill-filter"));
+      });
+    });
+    document.getElementById("skills-search-input")?.addEventListener("input", (e) => {
+      this.fetchSkills(undefined, e.target.value);
+    });
+    document.getElementById("skills-rescan-btn")?.addEventListener("click", () => this.fetchSkills());
+    document.getElementById("skills-run-btn")?.addEventListener("click", () => this.executeSelectedSkill());
+    document.getElementById("skills-view-doc-btn")?.addEventListener("click", () => this.viewSelectedSkillDoc());
+
+    // 3. Skill Manager Listeners
+    document.getElementById("skmgr-install-btn")?.addEventListener("click", () => this.installSkillFromPath());
+
+    // 4. Permissions Listeners
+    document.getElementById("perm-grant-submit-btn")?.addEventListener("click", () => this.submitGrantPermission());
+
+    // 5. Collaboration Listeners
+    document.getElementById("collab-plan-btn")?.addEventListener("click", () => this.planCollaborationTask());
+    document.getElementById("collab-start-btn")?.addEventListener("click", () => this.startCollaborationTask());
+    document.getElementById("collab-pause-btn")?.addEventListener("click", () => this.pauseCollaborationTask());
+    document.getElementById("collab-resume-btn")?.addEventListener("click", () => this.resumeCollaborationTask());
+    document.getElementById("collab-cancel-btn")?.addEventListener("click", () => this.cancelCollaborationTask());
+
+    // 6. Activity Log Listeners
+    document.getElementById("act-filter-apply-btn")?.addEventListener("click", () => this.loadActivityEvents());
+    document.getElementById("act-export-json-btn")?.addEventListener("click", () => this.exportActivityLogs("json"));
+    document.getElementById("act-export-csv-btn")?.addEventListener("click", () => this.exportActivityLogs("csv"));
+    document.getElementById("act-clear-btn")?.addEventListener("click", () => this.clearActivityLogs());
+
+    // 7. Memory Timeline Listeners
+    document.getElementById("mem-recording-toggle")?.addEventListener("click", () => this.toggleMemoryRecording());
+    document.getElementById("mem-purge-cat-btn")?.addEventListener("click", () => this.bulkPurgeCategory());
+    document.getElementById("mem-search-btn")?.addEventListener("click", () => this.loadMemoryTimeline());
+    document.getElementById("mem-filter-cat")?.addEventListener("change", () => this.loadMemoryTimeline());
+    document.getElementById("mem-filter-source")?.addEventListener("change", () => this.loadMemoryTimeline());
+    document.getElementById("mem-add-modal-btn")?.addEventListener("click", () => this.addMemoryNodePrompt());
+  }
+
+  // -------------------------------------------------------------------------
+  // COMPONENT 1: AI BROWSER OPERATOR
+  // -------------------------------------------------------------------------
+  async initBrowserOperator() {
+    await this.fetchBrowserTabs();
+    await this.fetchBrowserSnapshot();
+    this.fetchBrowserBookmarks();
+  }
+
+  async fetchBrowserTabs() {
+    try {
+      const res = await fetch("/api/browser/tabs");
+      const data = await res.json();
+      const tabs = data.tabs || [];
+      const strip = document.getElementById("br-tab-strip");
+      if (!strip) return;
+
+      const items = tabs.map(t => `
+        <div class="br-tab-item ${t.is_active ? 'active' : ''}" data-tab-id="${t.tab_id}" onclick="jarvis.switchBrowserTab('${t.tab_id}')">
+          <span class="br-tab-title" title="${escapeHtml(t.title)}">${escapeHtml(t.title || 'Blank')}</span>
+          <button class="br-tab-close" onclick="event.stopPropagation(); jarvis.closeBrowserTab('${t.tab_id}')">×</button>
+        </div>
+      `).join("");
+
+      strip.innerHTML = items + `<button class="br-new-tab-btn" id="br-new-tab-btn" onclick="jarvis.openNewBrowserTab()">+ New Tab</button>`;
+    } catch (e) {
+      console.error("fetchBrowserTabs error:", e);
+    }
+  }
+
+  async openNewBrowserTab(url = "about:blank") {
+    try {
+      const res = await fetch("/api/browser/tab/new", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url })
+      });
+      const data = await res.json();
+      if (data.tab_id) {
+        await this.fetchBrowserTabs();
+        await this.fetchBrowserSnapshot();
+      }
+    } catch (e) {
+      alert("Open tab error: " + e);
+    }
+  }
+
+  async switchBrowserTab(tabId) {
+    try {
+      await fetch("/api/browser/tab/switch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tab_id: tabId })
+      });
+      await this.fetchBrowserTabs();
+      await this.fetchBrowserSnapshot();
+    } catch (e) {
+      console.error("switchBrowserTab error:", e);
+    }
+  }
+
+  async closeBrowserTab(tabId) {
+    try {
+      await fetch("/api/browser/tab/close", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tab_id: tabId })
+      });
+      await this.fetchBrowserTabs();
+      await this.fetchBrowserSnapshot();
+    } catch (e) {
+      console.error("closeBrowserTab error:", e);
+    }
+  }
+
+  async navigateBrowser(url) {
+    if (!url || !url.trim()) return;
+    let target = url.trim();
+    if (!target.startsWith("http://") && !target.startsWith("https://") && target !== "about:blank") {
+      target = "https://" + target;
+    }
+    const titleEl = document.getElementById("br-viewport-title");
+    if (titleEl) titleEl.textContent = "Navigating to " + target + "...";
+
+    try {
+      const res = await fetch("/api/browser/navigate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: target })
+      });
+      const data = await res.json();
+      if (data.status === "ERROR") {
+        alert("Navigation Blocked: " + data.error);
+      } else {
+        const input = document.getElementById("br-url-input");
+        if (input) input.value = data.url;
+        await this.fetchBrowserTabs();
+        await this.fetchBrowserSnapshot();
+      }
+    } catch (e) {
+      alert("Navigation Error: " + e);
+    }
+  }
+
+  async performBrowserAction(action, params = {}) {
+    try {
+      const res = await fetch("/api/browser/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, params })
+      });
+      const data = await res.json();
+      if (data.status === "SUCCESS") {
+        await this.fetchBrowserSnapshot();
+      }
+    } catch (e) {
+      console.error("performBrowserAction error:", e);
+    }
+  }
+
+  async fetchBrowserSnapshot() {
+    try {
+      const res = await fetch("/api/browser/snapshot");
+      const data = await res.json();
+      if (data.status === "SUCCESS") {
+        const titleEl = document.getElementById("br-viewport-title");
+        if (titleEl) titleEl.textContent = data.title || "Blank";
+
+        const urlInput = document.getElementById("br-url-input");
+        if (urlInput && data.url && data.url !== "about:blank") urlInput.value = data.url;
+
+        const img = document.getElementById("br-screenshot-img");
+        const placeholder = document.getElementById("br-placeholder-msg");
+        const domPre = document.getElementById("br-dom-text");
+
+        if (domPre) domPre.textContent = data.text || "No readable body text.";
+
+        if (img && data.screenshot_b64) {
+          img.src = "data:image/jpeg;base64," + data.screenshot_b64;
+          img.style.display = "block";
+          if (placeholder) placeholder.style.display = "none";
+        }
+      }
+    } catch (e) {
+      console.error("fetchBrowserSnapshot error:", e);
+    }
+  }
+
+  async aiSummarizePage() {
+    const box = document.getElementById("br-summary-output");
+    if (box) box.innerHTML = "<span class='dim-text'>Extracting page DOM and generating AI summary...</span>";
+    try {
+      const res = await fetch("/api/browser/ai/summarize", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const data = await res.json();
+      if (data.status === "SUCCESS") {
+        box.innerHTML = `
+          <strong>${escapeHtml(data.title)}</strong> (${data.word_count} words)<br><br>
+          <p>${escapeHtml(data.summary)}</p>
+          <ul style="margin:6px 0; padding-left:18px;">
+            ${(data.takeaways || []).map(t => `<li>${escapeHtml(t)}</li>`).join("")}
+          </ul>
+        `;
+      } else {
+        box.innerHTML = `<span style="color:#ef4444;">Error: ${escapeHtml(data.error)}</span>`;
+      }
+    } catch (e) {
+      if (box) box.innerHTML = `<span style="color:#ef4444;">Summarization failed: ${e}</span>`;
+    }
+  }
+
+  async aiGroundedQA(question) {
+    const box = document.getElementById("br-qa-output");
+    if (box) box.innerHTML = "<span class='dim-text'>Scanning page DOM for verified answers...</span>";
+    try {
+      const res = await fetch("/api/browser/ai/qa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question })
+      });
+      const data = await res.json();
+      if (data.status === "SUCCESS") {
+        box.innerHTML = `
+          <strong style="color:var(--cyan-neon);">Answer (Confidence: ${Math.round(data.confidence * 100)}%):</strong><br>
+          <p style="margin-top:4px;">${escapeHtml(data.answer)}</p>
+          <span style="font-size:0.7rem; color:var(--text-muted);">Source: ${escapeHtml(data.source_url)}</span>
+        `;
+      }
+    } catch (e) {
+      if (box) box.innerHTML = `<span style="color:#ef4444;">Q&A error: ${e}</span>`;
+    }
+  }
+
+  async aiExtractTables() {
+    const box = document.getElementById("br-tables-output");
+    if (box) box.innerHTML = "<span class='dim-text'>Scanning page for table elements...</span>";
+    try {
+      const res = await fetch("/api/browser/ai/extract-tables", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const data = await res.json();
+      if (data.status === "SUCCESS" && data.tables.length > 0) {
+        box.innerHTML = `<strong>Found ${data.table_count} Table(s):</strong><pre class="code-output-pre" style="max-height:120px; margin-top:6px;">${escapeHtml(JSON.stringify(data.tables, null, 2))}</pre>`;
+      } else {
+        box.innerHTML = "<span class='dim-text'>No tabular HTML elements detected on this page.</span>";
+      }
+    } catch (e) {
+      if (box) box.innerHTML = `<span style="color:#ef4444;">Table extraction failed: ${e}</span>`;
+    }
+  }
+
+  async aiGenerateReport() {
+    const box = document.getElementById("br-report-output");
+    if (box) box.innerHTML = "<span class='dim-text'>Compiling grounded publication-grade PDF report...</span>";
+    try {
+      const res = await fetch("/api/browser/ai/report", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const data = await res.json();
+      if (data.status === "SUCCESS" && data.report) {
+        box.innerHTML = `
+          <span style="color:#10b981; font-weight:700;">✅ Research Report Ready!</span><br>
+          <a href="${data.report.pdf_url}" target="_blank" class="action-btn-sm primary-btn" style="display:inline-block; margin-top:6px; text-decoration:none;">📄 Open ${escapeHtml(data.report.pdf_filename)} (${data.report.size_kb} KB)</a>
+        `;
+      } else {
+        box.innerHTML = `<span style="color:#ef4444;">Report error: ${escapeHtml(data.error)}</span>`;
+      }
+    } catch (e) {
+      if (box) box.innerHTML = `<span style="color:#ef4444;">PDF compilation failed: ${e}</span>`;
+    }
+  }
+
+  async fetchBrowserBookmarks() {
+    try {
+      const res = await fetch("/api/browser/bookmarks");
+      const data = await res.json();
+      const list = data.bookmarks || [];
+      const countEl = document.getElementById("br-bm-count");
+      if (countEl) countEl.textContent = list.length;
+
+      const container = document.getElementById("br-bookmarks-view");
+      if (!container) return;
+
+      if (list.length === 0) {
+        container.innerHTML = "<p class='dim-text' style='padding:10px;'>No bookmarks saved.</p>";
+        return;
+      }
+      container.innerHTML = list.map(b => `
+        <div class="drawer-item">
+          <div>
+            <strong>${escapeHtml(b.title)}</strong>
+            <span class="dim-text" style="margin-left:8px;">${escapeHtml(b.url)}</span>
+          </div>
+          <div style="display:flex; gap:6px;">
+            <button class="action-btn-sm" onclick="jarvis.navigateBrowser('${b.url}')">Open</button>
+            <button class="action-btn-sm danger-btn" onclick="jarvis.deleteBrowserBookmark('${b.id}')">Delete</button>
+          </div>
+        </div>
+      `).join("");
+    } catch (e) {}
+  }
+
+  async addBrowserBookmark() {
+    const title = document.getElementById("br-viewport-title")?.textContent || "Web Bookmark";
+    const url = document.getElementById("br-url-input")?.value || "";
+    if (!url) return alert("Please navigate to a page first.");
+    try {
+      await fetch("/api/browser/bookmarks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, url })
+      });
+      this.fetchBrowserBookmarks();
+      alert("Bookmark saved!");
+    } catch (e) {
+      alert("Bookmark error: " + e);
+    }
+  }
+
+  async deleteBrowserBookmark(id) {
+    try {
+      await fetch(`/api/browser/bookmarks/${id}`, { method: "DELETE" });
+      this.fetchBrowserBookmarks();
+    } catch (e) {}
+  }
+
+  async fetchBrowserHistory() {
+    try {
+      const res = await fetch("/api/browser/history");
+      const data = await res.json();
+      const list = data.history || [];
+      const countEl = document.getElementById("br-hist-count");
+      if (countEl) countEl.textContent = list.length;
+
+      const container = document.getElementById("br-history-view");
+      if (!container) return;
+      if (list.length === 0) {
+        container.innerHTML = "<p class='dim-text' style='padding:10px;'>No history recorded.</p>";
+        return;
+      }
+      container.innerHTML = list.map(h => `
+        <div class="drawer-item">
+          <div>
+            <strong>${escapeHtml(h.title)}</strong>
+            <span class="dim-text" style="margin-left:8px;">${escapeHtml(h.url)}</span>
+          </div>
+          <button class="action-btn-sm" onclick="jarvis.navigateBrowser('${h.url}')">Visit</button>
+        </div>
+      `).join("");
+    } catch (e) {}
+  }
+
+  // -------------------------------------------------------------------------
+  // COMPONENT 2: SKILLS SYSTEM
+  // -------------------------------------------------------------------------
+  async fetchSkills(filterType = "all", searchQuery = "") {
+    const grid = document.getElementById("skills-cards-grid");
+    if (!grid) return;
+    try {
+      const res = await fetch("/api/skills/list");
+      const data = await res.json();
+      let skills = data.skills || [];
+
+      if (filterType !== "all") {
+        skills = skills.filter(s => s.skill_type === filterType);
+      }
+      if (searchQuery && searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        skills = skills.filter(s => s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q) || s.description.toLowerCase().includes(q));
+      }
+
+      this.installedSkillsCache = skills;
+
+      if (skills.length === 0) {
+        grid.innerHTML = "<p class='dim-text' style='grid-column:1/-1; padding:20px;'>No skills matched the criteria.</p>";
+        return;
+      }
+
+      grid.innerHTML = skills.map(s => `
+        <div class="skill-card ${this.selectedSkillId === s.id ? 'selected' : ''}" onclick="jarvis.selectSkill('${s.id}')">
+          <div class="skill-card-top">
+            <span class="skill-title">${escapeHtml(s.name)}</span>
+            <span class="badge-pill ${s.skill_type}">${s.skill_type}</span>
+          </div>
+          <p class="skill-desc">${escapeHtml(s.description)}</p>
+          <div class="skill-tags">
+            ${(s.manifest.tags || []).map(t => `<span class="tag-chip">#${escapeHtml(t)}</span>`).join("")}
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
+            <span style="font-size:0.68rem; color:var(--text-muted);">v${s.version} • by ${escapeHtml(s.author)}</span>
+            <span class="status-tag ${s.is_enabled ? 'active' : 'denied'}">${s.is_enabled ? 'ENABLED' : 'DISABLED'}</span>
+          </div>
+        </div>
+      `).join("");
+
+      if (!this.selectedSkillId && skills.length > 0) {
+        this.selectSkill(skills[0].id);
+      }
+    } catch (e) {
+      grid.innerHTML = `<div class="error-msg">Failed to load skills: ${e}</div>`;
+    }
+  }
+
+  selectSkill(skillId) {
+    this.selectedSkillId = skillId;
+    document.querySelectorAll(".skill-card").forEach(c => c.classList.remove("selected"));
+
+    const skill = (this.installedSkillsCache || []).find(s => s.id === skillId);
+    if (!skill) return;
+
+    document.getElementById("exec-panel-title").textContent = skill.name;
+    document.getElementById("exec-panel-badge").textContent = skill.skill_type.toUpperCase();
+    document.getElementById("exec-panel-desc").textContent = skill.description;
+
+    const paramInput = document.getElementById("skills-param-input");
+    if (paramInput) {
+      paramInput.value = JSON.stringify(skill.manifest.parameters_schema || {}, null, 2);
+    }
+    const runBtn = document.getElementById("skills-run-btn");
+    const docBtn = document.getElementById("skills-view-doc-btn");
+    if (runBtn) runBtn.disabled = !skill.is_enabled;
+    if (docBtn) docBtn.disabled = false;
+  }
+
+  async executeSelectedSkill() {
+    if (!this.selectedSkillId) return;
+    const resultBox = document.getElementById("skills-exec-result");
+    const statusTag = document.getElementById("exec-status-tag");
+    const paramInput = document.getElementById("skills-param-input");
+
+    let params = {};
+    try {
+      params = JSON.parse(paramInput.value || "{}");
+    } catch (e) {
+      return alert("Invalid JSON in parameters box: " + e);
+    }
+
+    if (statusTag) {
+      statusTag.textContent = "RUNNING...";
+      statusTag.className = "status-tag running";
+    }
+    if (resultBox) resultBox.textContent = "Executing skill in secure sandbox...";
+
+    try {
+      const res = await fetch(`/api/skills/${this.selectedSkillId}/execute`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ parameters: params, timeout_seconds: 30 })
+      });
+      const data = await res.json();
+      if (statusTag) {
+        statusTag.textContent = data.status;
+        statusTag.className = `status-tag ${data.status.toLowerCase()}`;
+      }
+      if (resultBox) {
+        resultBox.textContent = JSON.stringify(data, null, 2);
+      }
+    } catch (e) {
+      if (resultBox) resultBox.textContent = "Execution request failed: " + e;
+    }
+  }
+
+  async viewSelectedSkillDoc() {
+    if (!this.selectedSkillId) return;
+    try {
+      const res = await fetch(`/api/skills/${this.selectedSkillId}`);
+      const data = await res.json();
+      alert(`=== ${data.name} (SKILL.md) ===\n\n${data.skill_md || 'No markdown documentation found.'}`);
+    } catch (e) {
+      alert("Error loading doc: " + e);
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // COMPONENT 3: SKILL MANAGER
+  // -------------------------------------------------------------------------
+  async fetchSkillManager() {
+    await this.loadSkillRegistryTable();
+    await this.fetchSkillExecutionHistory();
+  }
+
+  async loadSkillRegistryTable() {
+    const tbody = document.getElementById("skmgr-table-body");
+    if (!tbody) return;
+    try {
+      const res = await fetch("/api/skills/list");
+      const data = await res.json();
+      const skills = data.skills || [];
+
+      tbody.innerHTML = skills.map(s => `
+        <tr>
+          <td><button class="action-btn-sm ${s.is_enabled ? 'buy-btn' : 'danger-btn'}" onclick="jarvis.toggleSkillState('${s.id}', ${!s.is_enabled})">${s.is_enabled ? 'Active' : 'Disabled'}</button></td>
+          <td><code>${escapeHtml(s.id)}</code></td>
+          <td><strong>${escapeHtml(s.name)}</strong></td>
+          <td><span class="badge-pill ${s.skill_type}">${s.skill_type}</span></td>
+          <td>v${s.version}</td>
+          <td>${(s.permissions_required || []).map(p => `<code style="font-size:0.7rem;">${p}</code>`).join(", ") || 'None'}</td>
+          <td>
+            <button class="action-btn-sm danger-btn" onclick="jarvis.uninstallSkill('${s.id}')">Uninstall</button>
+          </td>
+        </tr>
+      `).join("");
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="7" class="error-msg">Error: ${e}</td></tr>`;
+    }
+  }
+
+  async toggleSkillState(skillId, enabled) {
+    try {
+      await fetch(`/api/skills/${skillId}/toggle`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled })
+      });
+      this.loadSkillRegistryTable();
+      this.fetchSkills();
+    } catch (e) {
+      alert("Toggle error: " + e);
+    }
+  }
+
+  async installSkillFromPath() {
+    const input = document.getElementById("skmgr-path-input");
+    const path = input ? input.value.trim() : "";
+    if (!path) return alert("Please specify the path to the skill folder.");
+
+    try {
+      const res = await fetch("/api/skills/install", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source_path: path })
+      });
+      const data = await res.json();
+      if (data.status === "SUCCESS") {
+        alert("Skill installed: " + data.message);
+        input.value = "";
+        this.loadSkillRegistryTable();
+        this.fetchSkills();
+      } else {
+        alert("Installation failed: " + (data.detail || data.error));
+      }
+    } catch (e) {
+      alert("Install error: " + e);
+    }
+  }
+
+  async uninstallSkill(skillId) {
+    if (!confirm(`Are you sure you want to uninstall and remove skill '${skillId}'?`)) return;
+    try {
+      const res = await fetch(`/api/skills/${skillId}`, { method: "DELETE" });
+      const data = await res.json();
+      alert(data.message || "Skill uninstalled.");
+      this.loadSkillRegistryTable();
+      this.fetchSkills();
+    } catch (e) {
+      alert("Uninstall error: " + e);
+    }
+  }
+
+  async fetchSkillExecutionHistory() {
+    const tbody = document.getElementById("skmgr-history-body");
+    if (!tbody) return;
+    try {
+      const res = await fetch("/api/skills/coding_specialist/history");
+      const data = await res.json();
+      const history = data.history || [];
+
+      if (history.length === 0) {
+        tbody.innerHTML = "<tr><td colspan='5' class='dim-text' style='text-align:center;'>No execution records found.</td></tr>";
+        return;
+      }
+
+      tbody.innerHTML = history.slice(0, 15).map(h => `
+        <tr>
+          <td>${new Date(h.executed_at * 1000).toLocaleTimeString()}</td>
+          <td><code>${escapeHtml(h.skill_id)}</code></td>
+          <td>${h.execution_time_ms}ms</td>
+          <td><span class="status-tag ${h.status.toLowerCase()}">${h.status}</span></td>
+          <td style="max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"><code>${escapeHtml(JSON.stringify(h.output || h.error))}</code></td>
+        </tr>
+      `).join("");
+    } catch (e) {}
+  }
+
+  // -------------------------------------------------------------------------
+  // COMPONENT 4: CENTRAL PERMISSION MANAGER
+  // -------------------------------------------------------------------------
+  async fetchPermissions() {
+    await this.renderGrantsTable();
+    await this.renderPendingApprovals();
+  }
+
+  async renderGrantsTable() {
+    const tbody = document.getElementById("perm-grants-body");
+    if (!tbody) return;
+    try {
+      const res = await fetch("/api/permissions/list");
+      const data = await res.json();
+      const grants = data.grants || [];
+
+      if (grants.length === 0) {
+        tbody.innerHTML = "<tr><td colspan='5' class='dim-text' style='text-align:center;'>No active permission grants.</td></tr>";
+        return;
+      }
+
+      tbody.innerHTML = grants.map(g => `
+        <tr>
+          <td><strong>${escapeHtml(g.component)}</strong></td>
+          <td><code>${escapeHtml(g.resource)}</code></td>
+          <td><span class="badge-pill ${g.level.toLowerCase()}">${g.level}</span></td>
+          <td>${g.is_persistent ? 'Persistent' : (g.expires_at ? 'Temporary (TTL)' : 'Session')}</td>
+          <td><button class="action-btn-sm danger-btn" onclick="jarvis.revokePermissionGrant('${g.id}')">Revoke</button></td>
+        </tr>
+      `).join("");
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="5" class="error-msg">Error: ${e}</td></tr>`;
+    }
+  }
+
+  async renderPendingApprovals() {
+    const container = document.getElementById("perm-pending-container");
+    if (!container) return;
+    try {
+      const res = await fetch("/api/permissions/pending");
+      const data = await res.json();
+      const pending = data.pending_actions || [];
+
+      if (pending.length === 0) {
+        container.innerHTML = "<p class='dim-text'>No pending actions waiting for user confirmation.</p>";
+        return;
+      }
+
+      container.innerHTML = pending.map(p => `
+        <div class="pending-card">
+          <div>
+            <strong>${escapeHtml(p.action_type)}</strong> (Target: ${escapeHtml(p.target)})<br>
+            <span style="font-size:0.75rem;">${escapeHtml(p.description)}</span><br>
+            <span style="font-size:0.7rem; color:#f59e0b;">Expires in ${p.remaining_seconds}s</span>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="action-btn-sm buy-btn" onclick="jarvis.approvePendingAction('${p.action_id}', true)">Approve & Persist</button>
+            <button class="action-btn-sm primary-btn" onclick="jarvis.approvePendingAction('${p.action_id}', false)">Approve Once</button>
+            <button class="action-btn-sm danger-btn" onclick="jarvis.rejectPendingAction('${p.action_id}')">Deny</button>
+          </div>
+        </div>
+      `).join("");
+    } catch (e) {}
+  }
+
+  async submitGrantPermission() {
+    const comp = document.getElementById("perm-new-comp")?.value;
+    const res = document.getElementById("perm-new-res")?.value;
+    const level = document.getElementById("perm-new-level")?.value;
+    const persist = document.getElementById("perm-new-persist")?.checked;
+    const notes = document.getElementById("perm-new-notes")?.value;
+
+    if (!res) return alert("Please specify target resource.");
+
+    try {
+      const resp = await fetch("/api/permissions/grant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          component: comp,
+          resource: res,
+          level: level,
+          is_persistent: persist,
+          notes: notes
+        })
+      });
+      const data = await resp.json();
+      if (data.status === "SUCCESS") {
+        alert(`Granted ${level} on ${comp}:${res}`);
+        document.getElementById("perm-new-res").value = "";
+        this.renderGrantsTable();
+      } else {
+        alert("Grant error: " + data.detail);
+      }
+    } catch (e) {
+      alert("Error: " + e);
+    }
+  }
+
+  async approvePendingAction(actionId, persist = false) {
+    try {
+      const res = await fetch(`/api/permissions/approve/${actionId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ grant_persistence: persist })
+      });
+      const data = await res.json();
+      alert(data.message || "Action approved.");
+      this.fetchPermissions();
+    } catch (e) {
+      alert("Approve error: " + e);
+    }
+  }
+
+  async rejectPendingAction(actionId) {
+    try {
+      const res = await fetch(`/api/permissions/reject/${actionId}`, { method: "POST" });
+      const data = await res.json();
+      alert(data.message || "Action rejected.");
+      this.fetchPermissions();
+    } catch (e) {
+      alert("Reject error: " + e);
+    }
+  }
+
+  async revokePermissionGrant(grantId) {
+    try {
+      await fetch(`/api/permissions/grant/${grantId}`, { method: "DELETE" });
+      this.renderGrantsTable();
+    } catch (e) {
+      alert("Revoke error: " + e);
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // COMPONENT 5: SKILL COLLABORATION ENGINE
+  // -------------------------------------------------------------------------
+  async fetchCollaboration() {
+    await this.fetchCollaborationTasksHistory();
+  }
+
+  async planCollaborationTask() {
+    const input = document.getElementById("collab-objective-input");
+    const obj = input ? input.value.trim() : "";
+    if (!obj) return alert("Please specify a multi-skill objective.");
+
+    try {
+      const res = await fetch("/api/collaboration/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ objective: obj })
+      });
+      const data = await res.json();
+      if (data.task_id) {
+        this.activeCollabTaskId = data.task_id;
+        document.getElementById("collab-active-task-title").textContent = `Pipeline: ${obj.slice(0, 45)}...`;
+        document.getElementById("collab-active-task-status").textContent = "PLANNED";
+        document.getElementById("collab-start-btn").disabled = false;
+        document.getElementById("collab-pause-btn").disabled = true;
+        document.getElementById("collab-resume-btn").disabled = true;
+        document.getElementById("collab-cancel-btn").disabled = true;
+
+        this.renderCollaborationStepPipeline(data.steps);
+      }
+    } catch (e) {
+      alert("Plan error: " + e);
+    }
+  }
+
+  renderCollaborationStepPipeline(steps = []) {
+    const track = document.getElementById("collab-step-track");
+    if (!track) return;
+    track.innerHTML = steps.map((s, idx) => `
+      <div class="collab-step-node" id="collab-node-${s.step_index}">
+        <span style="font-size:0.68rem; color:var(--cyan-neon);">Step ${s.step_index + 1}</span>
+        <strong>${escapeHtml(s.skill_id)}</strong>
+        <span class="dim-text" style="font-size:0.7rem;">${escapeHtml(s.action_name)}</span>
+      </div>
+      ${idx < steps.length - 1 ? '<span class="collab-arrow">➔</span>' : ''}
+    `).join("");
+  }
+
+  async startCollaborationTask() {
+    if (!this.activeCollabTaskId) return;
+    document.getElementById("collab-start-btn").disabled = true;
+    document.getElementById("collab-pause-btn").disabled = false;
+    document.getElementById("collab-cancel-btn").disabled = false;
+    document.getElementById("collab-active-task-status").textContent = "RUNNING";
+
+    const stream = document.getElementById("collab-stream-output");
+    if (stream) stream.textContent = "Pipeline executing. Awaiting real-time skill handoffs...";
+
+    try {
+      await fetch(`/api/collaboration/start/${this.activeCollabTaskId}`, { method: "POST" });
+    } catch (e) {
+      alert("Start error: " + e);
+    }
+  }
+
+  async pauseCollaborationTask() {
+    if (!this.activeCollabTaskId) return;
+    await fetch(`/api/collaboration/task/${this.activeCollabTaskId}/pause`, { method: "POST" });
+    document.getElementById("collab-pause-btn").disabled = true;
+    document.getElementById("collab-resume-btn").disabled = false;
+    document.getElementById("collab-active-task-status").textContent = "PAUSED";
+  }
+
+  async resumeCollaborationTask() {
+    if (!this.activeCollabTaskId) return;
+    await fetch(`/api/collaboration/task/${this.activeCollabTaskId}/resume`, { method: "POST" });
+    document.getElementById("collab-pause-btn").disabled = false;
+    document.getElementById("collab-resume-btn").disabled = true;
+    document.getElementById("collab-active-task-status").textContent = "RUNNING";
+  }
+
+  async cancelCollaborationTask() {
+    if (!this.activeCollabTaskId) return;
+    await fetch(`/api/collaboration/task/${this.activeCollabTaskId}/cancel`, { method: "POST" });
+    document.getElementById("collab-pause-btn").disabled = true;
+    document.getElementById("collab-resume-btn").disabled = true;
+    document.getElementById("collab-cancel-btn").disabled = true;
+    document.getElementById("collab-active-task-status").textContent = "CANCELLED";
+  }
+
+  async fetchCollaborationTasksHistory() {
+    const tbody = document.getElementById("collab-tasks-table");
+    if (!tbody) return;
+    try {
+      const res = await fetch("/api/collaboration/tasks");
+      const data = await res.json();
+      const tasks = data.tasks || [];
+
+      if (tasks.length === 0) {
+        tbody.innerHTML = "<tr><td colspan='6' class='dim-text' style='text-align:center;'>No collaborative tasks found.</td></tr>";
+        return;
+      }
+
+      tbody.innerHTML = tasks.map(t => `
+        <tr>
+          <td><code>${escapeHtml(t.task_id)}</code></td>
+          <td><strong>${escapeHtml(t.objective)}</strong></td>
+          <td>${t.plan ? t.plan.length : 0} Steps</td>
+          <td><span class="status-tag ${t.status.toLowerCase()}">${t.status}</span></td>
+          <td>${new Date(t.created_at * 1000).toLocaleString()}</td>
+          <td><button class="action-btn-sm" onclick="jarvis.viewCollaborationDetails('${t.task_id}')">Inspect</button></td>
+        </tr>
+      `).join("");
+    } catch (e) {}
+  }
+
+  async viewCollaborationDetails(taskId) {
+    try {
+      const res = await fetch(`/api/collaboration/task/${taskId}`);
+      const data = await res.json();
+      alert(`=== Collaborative Task: ${data.task_id} ===\nStatus: ${data.status}\nOutput Summary:\n${JSON.stringify(data.output || {}, null, 2)}`);
+    } catch (e) {
+      alert("Error: " + e);
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // COMPONENT 6: UNIFIED ACTIVITY LOG
+  // -------------------------------------------------------------------------
+  async fetchActivityLogs() {
+    await this.fetchActivityStats();
+    await this.loadActivityEvents();
+  }
+
+  async fetchActivityStats() {
+    try {
+      const res = await fetch("/api/activity-log/stats");
+      const data = await res.json();
+
+      document.getElementById("act-kpi-total").textContent = data.total_events || 0;
+      document.getElementById("act-kpi-browser").textContent = data.by_component?.browser || 0;
+      document.getElementById("act-kpi-skills").textContent = data.by_component?.skills || 0;
+      document.getElementById("act-kpi-perm").textContent = data.by_component?.permissions || 0;
+      document.getElementById("act-kpi-os").textContent = (data.by_component?.os || 0) + (data.by_component?.system || 0);
+    } catch (e) {}
+  }
+
+  async loadActivityEvents() {
+    const tbody = document.getElementById("act-table-body");
+    if (!tbody) return;
+
+    const comp = document.getElementById("act-filter-comp")?.value || "all";
+    const status = document.getElementById("act-filter-status")?.value || "all";
+    const search = document.getElementById("act-filter-search")?.value || "";
+
+    const url = `/api/activity-log/events?component=${comp}&execution_status=${status}&search=${encodeURIComponent(search)}&limit=50`;
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+      const events = data.events || [];
+
+      if (events.length === 0) {
+        tbody.innerHTML = "<tr><td colspan='7' class='dim-text' style='text-align:center;'>No matching activity logs.</td></tr>";
+        return;
+      }
+
+      tbody.innerHTML = events.map(e => `
+        <tr>
+          <td>${escapeHtml(e.timestamp)}</td>
+          <td><span class="badge-pill">${escapeHtml(e.component)}</span></td>
+          <td><strong>${escapeHtml(e.action)}</strong></td>
+          <td style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"><code>${escapeHtml(e.target_resource || '-')}</code></td>
+          <td><span class="badge ${e.approval_status === 'USER_APPROVED' ? 'buy-btn' : ''}">${escapeHtml(e.approval_status)}</span></td>
+          <td><span class="status-tag ${e.execution_status.toLowerCase()}">${escapeHtml(e.execution_status)}</span></td>
+          <td>${escapeHtml(e.result_summary || e.error_info || '-')}</td>
+        </tr>
+      `).join("");
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="7" class="error-msg">Error: ${e}</td></tr>`;
+    }
+  }
+
+  exportActivityLogs(format = "json") {
+    window.open(`/api/activity-log/export?format=${format}`, "_blank");
+  }
+
+  async clearActivityLogs() {
+    if (!confirm("Are you sure you want to purge all activity logs? This is a SENSITIVE operation.")) return;
+    try {
+      const res = await fetch("/api/activity-log/clear", { method: "DELETE" });
+      const data = await res.json();
+      if (data.status === "SUCCESS") {
+        alert("Logs cleared: " + data.cleared_records + " records purged.");
+        this.fetchActivityLogs();
+      }
+    } catch (e) {
+      alert("Clear error: " + e);
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // COMPONENT 7: MEMORY TIMELINE & TRANSPARENCY
+  // -------------------------------------------------------------------------
+  async fetchMemoryTimeline() {
+    await this.loadMemoryPrivacySettings();
+    await this.loadMemoryTimeline();
+  }
+
+  async loadMemoryPrivacySettings() {
+    try {
+      const res = await fetch("/api/memory/privacy/settings");
+      const data = await res.json();
+      const toggle = document.getElementById("mem-recording-toggle");
+      if (toggle) {
+        toggle.textContent = data.recording_enabled ? "RECORDING: ON" : "RECORDING: MUTED";
+        toggle.className = `action-btn-sm ${data.recording_enabled ? 'buy-btn' : 'danger-btn'}`;
+        this.memoryRecordingState = data.recording_enabled;
+      }
+    } catch (e) {}
+  }
+
+  async toggleMemoryRecording() {
+    const newState = !this.memoryRecordingState;
+    try {
+      await fetch("/api/memory/privacy/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recording_enabled: newState })
+      });
+      await this.loadMemoryPrivacySettings();
+    } catch (e) {
+      alert("Toggle error: " + e);
+    }
+  }
+
+  async loadMemoryTimeline() {
+    const feed = document.getElementById("mem-timeline-feed");
+    if (!feed) return;
+
+    const cat = document.getElementById("mem-filter-cat")?.value || "all";
+    const src = document.getElementById("mem-filter-source")?.value || "all";
+    const search = document.getElementById("mem-search-input")?.value || "";
+
+    const url = `/api/memory/timeline?category=${cat}&source_type=${src}&search=${encodeURIComponent(search)}&limit=40`;
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+      const items = data.timeline || [];
+
+      if (items.length === 0) {
+        feed.innerHTML = "<p class='dim-text' style='padding:20px; text-align:center;'>No memories recorded in this timeline view.</p>";
+        return;
+      }
+
+      feed.innerHTML = items.map(m => `
+        <div class="memory-timeline-card ${m.is_important ? 'important' : ''}">
+          <div class="memory-card-header">
+            <span class="memory-source-pill">📌 ${escapeHtml(m.source_type)} ${m.source_reference ? '(' + escapeHtml(m.source_reference) + ')' : ''}</span>
+            <span>${new Date(m.created_at * 1000).toLocaleString()} • Accessed ${m.access_count}x</span>
+          </div>
+          <div class="memory-card-body">
+            <strong>[${escapeHtml(m.category)}] ${escapeHtml(m.key || 'Node')}:</strong><br>
+            ${escapeHtml(m.content)}
+          </div>
+          <div class="memory-card-footer">
+            <div>
+              ${(m.tags || []).map(t => `<span class="tag-chip">#${escapeHtml(t)}</span>`).join(" ")}
+            </div>
+            <div class="memory-card-actions">
+              <button class="action-btn-sm" onclick="jarvis.editMemoryInPlace('${m.id}', \`${escapeHtml(m.content)}\`)">✏️ Edit</button>
+              <button class="action-btn-sm" onclick="jarvis.viewMemoryAccessLogs('${m.id}')">🕒 History</button>
+              <button class="action-btn-sm danger-btn" onclick="jarvis.deleteMemoryPermanent('${m.id}')">🗑️ Delete</button>
+            </div>
+          </div>
+        </div>
+      `).join("");
+    } catch (e) {
+      feed.innerHTML = `<div class="error-msg">Failed to load memory timeline: ${e}</div>`;
+    }
+  }
+
+  async editMemoryInPlace(memoryId, currentContent) {
+    const updated = prompt("Edit memory content in-place:", currentContent);
+    if (updated === null || updated.trim() === currentContent.trim()) return;
+
+    try {
+      const res = await fetch(`/api/memory/${memoryId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: updated.trim() })
+      });
+      const data = await res.json();
+      if (data.status === "SUCCESS") {
+        this.loadMemoryTimeline();
+      }
+    } catch (e) {
+      alert("Edit error: " + e);
+    }
+  }
+
+  async deleteMemoryPermanent(memoryId) {
+    if (!confirm("Permanently purge this memory from SQLite and full-text search index?")) return;
+    try {
+      const res = await fetch(`/api/memory/${memoryId}`, { method: "DELETE" });
+      const data = await res.json();
+      if (data.status === "SUCCESS") {
+        this.loadMemoryTimeline();
+      }
+    } catch (e) {
+      alert("Delete error: " + e);
+    }
+  }
+
+  async viewMemoryAccessLogs(memoryId) {
+    try {
+      const res = await fetch(`/api/memory/${memoryId}/history`);
+      const data = await res.json();
+      if (data.status === "SUCCESS") {
+        const logs = data.access_logs || [];
+        const logsStr = logs.map(l => `- ${new Date(l.accessed_at * 1000).toLocaleString()}: by [${l.component}] context: ${l.context_summary}`).join("\n");
+        alert(`=== Memory Access Audit Trail (${memoryId}) ===\nTotal Accesses: ${data.access_count}\n\n${logsStr || 'No access records yet.'}`);
+      }
+    } catch (e) {
+      alert("History error: " + e);
+    }
+  }
+
+  async bulkPurgeCategory() {
+    const cat = document.getElementById("mem-purge-cat-select")?.value;
+    if (!cat) return;
+    if (!confirm(`Are you sure you want to bulk purge all memories in category '${cat}'?`)) return;
+
+    try {
+      const res = await fetch("/api/memory/privacy/clear-category", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category: cat })
+      });
+      const data = await res.json();
+      alert(`Purged ${data.cleared_count} memories from '${cat}'.`);
+      this.loadMemoryTimeline();
+    } catch (e) {
+      alert("Purge error: " + e);
+    }
+  }
+
+  async addMemoryNodePrompt() {
+    const cat = prompt("Enter Memory Category (e.g. user_preferences, research_knowledge):", "research_knowledge");
+    if (!cat) return;
+    const content = prompt("Enter Memory Content:");
+    if (!content) return;
+    const key = prompt("Enter Optional Key / Title:", "Note");
+
+    try {
+      const res = await fetch("/api/memory/node", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category: cat,
+          content: content,
+          key: key,
+          source_type: "explicit_instruction"
+        })
+      });
+      const data = await res.json();
+      if (data.status === "SUCCESS") {
+        alert("Memory node added!");
+        this.loadMemoryTimeline();
+      } else {
+        alert("Failed to add memory: " + (data.detail || data.error));
+      }
+    } catch (e) {
+      alert("Add memory error: " + e);
     }
   }
 }

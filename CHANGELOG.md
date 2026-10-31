@@ -6,6 +6,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [2.2.0] - 2026-10-31
+
+### 🚀 7 Core Architecture Components Implementation
+- **🌐 Component 1 — AI Browser Operator:**
+  - Integrated Playwright-powered multi-tab browser engine (`backend/browser/browser_engine.py`) with persistent context support in `data/browser_profile`.
+  - Added enterprise-grade SSRF protection (`validate_url_for_ssrf`), protocol restriction, prompt injection containment, and emergency stop automation (`POST /api/browser/stop`).
+  - Implemented AI page understanding suite (`backend/browser/browser_operator.py`): page summarization, grounded Q&A against DOM, multi-tab comparison, HTML table extraction, and grounded publication-grade PDF report compiler.
+  - Implemented persistent bookmarks, history, and downloads in SQLite (`browser_bookmarks`, `browser_history`, `browser_downloads`).
+- **⚡ Component 2 — Modular Skills System:**
+  - Established standardized `skills/` directory structure with `manifest.json`, `SKILL.md`, `scripts/main.py`, `references/`, and `examples/`.
+  - Implemented `SkillValidator` with Python AST static security analysis to detect and block dangerous imports (`ctypes`, `winreg`) and unsafe functions (`eval`, `exec`).
+  - Authored 6 production skills: `coding_specialist`, `deep_researcher`, `pdf_generator`, `windows_controller`, `data_analyst`, and `custom_automation`.
+- **🧰 Component 3 — Skill Manager:**
+  - Built dynamic discovery, registration, and enable/disable toggling in SQLite (`skills_registry`).
+  - Added secure local folder installation with pre-install directory structure and security audits.
+  - Added execution history tracking in `skill_execution_history`.
+- **🛡️ Component 4 — Central Permission Manager:**
+  - Centralized authorization authority with Default-Deny architecture (`backend/permissions/permission_manager.py`).
+  - Defined 4 permission levels: `READ`, `WRITE`, `EXECUTE`, `SENSITIVE`.
+  - Stored persistent and temporary (TTL) grants in SQLite `permission_grants` table.
+  - Integrated interactive two-step approval flow via `ActionConfirmationRegistry` with real-time WebSocket notifications.
+- **🤝 Component 5 — Skill Collaboration Engine:**
+  - Developed multi-skill task planner (`backend/collaboration/collaboration_engine.py`) decomposing complex user objectives into sequential DAG pipelines.
+  - Built data pipelining transferring outputs from preceding skills into downstream inputs.
+  - Added lifecycle controls: pause, resume, cancel, and step retry with SQLite persistence in `collaboration_tasks` and `collaboration_steps`.
+- **📜 Component 6 — Unified Activity Log:**
+  - Unified audit trail (`backend/activity/activity_logger.py`) capturing operations across Browser, Skills, Permissions, Collaboration, Memory, OS, and System.
+  - Dual-write architecture to SQLite `activity_logs` table and `data/audit_log.json`.
+  - Automatic secret redaction for all tokens, credentials, and keys via `redact_secrets()`.
+  - Filtering by component, execution status, approval status, and text search, with JSON and CSV export capabilities.
+- **⏳ Component 7 — Memory Timeline & Transparency Engine:**
+  - Migrated `memory_nodes` table to schema v3 with source attribution (`source_type`, `source_url`, `source_reference`), importance flags, and access counters.
+  - Implemented access tracking in `memory_access_log`.
+  - Added true in-place editing, permanent deletion (from SQLite and FTS5 index), and comprehensive privacy controls (recording kill-switch, excluded categories, sensitive keywords).
+- **🧪 Test Suite & Quality Assurance:**
+  - 81 / 81 automated pytest tests passing with 100% success rate across all components.
+
 ## [2.1.1] - 2026-10-31
 
 ### 🔒 Security, SSRF & Frontend XSS Hardening

@@ -1,0 +1,26 @@
+{
+  "id": "windows_controller",
+  "name": "Windows Desktop & OS Automation Specialist",
+  "version": "1.0.0",
+  "type": "script_enabled",
+  "description": "Inspects running processes, controls active windows, monitors hardware telemetry, and safely interfaces with Windows OS.",
+  "author": "JARVIS APEX Core",
+  "entrypoint": "scripts/main.py",
+  "permissions_required": [
+    "skills:windows_controller:EXECUTE",
+    "os:windows:READ",
+    "os:windows:WRITE"
+  ],
+  "parameters_schema": {
+    "action": "string (get_telemetry, list_windows, list_processes, set_volume, get_clipboard)",
+    "value": "any (optional action payload)"
+  },
+  "returns_schema": {
+    "status": "string",
+    "action": "string",
+    "data": "any",
+    "message": "string"
+  },
+  "tags": ["windows", "os", "desktop", "process", "telemetry"],
+  "is_enabled": true
+}

@@ -1,0 +1,6 @@
+{
+  "parameters": {
+    "code": "def calculate_compound_interest(principal, rate, years):\n    return principal * ((1 + rate) ** years)\n\nclass InvestmentPlan:\n    pass",
+    "check_security": true
+  }
+}

@@ -1,5 +1,12 @@
 """
-JARVIS-APEX Persistent Memory Brain Subsystem
-7-Category SQLite Persistent Memory with FTS5 Full-Text Search and Bounded Cloud Sync.
+JARVIS-APEX Persistent Memory Brain & Timeline Subsystem.
 """
 
+from .memory_brain import PersistentMemoryBrain, MemoryCategory
+from .memory_timeline import MemoryTimelineManager
+
+__all__ = [
+    "PersistentMemoryBrain",
+    "MemoryCategory",
+    "MemoryTimelineManager"
+]

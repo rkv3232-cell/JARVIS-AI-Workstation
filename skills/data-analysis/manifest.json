@@ -1,0 +1,27 @@
+{
+  "id": "data_analyst",
+  "name": "Quantitative Data & Financial Analyst",
+  "version": "1.0.0",
+  "type": "script_enabled",
+  "description": "Performs statistical analysis, computes financial metrics (mean, std, Sharpe, drawdown), and generates table summaries.",
+  "author": "JARVIS APEX Core",
+  "entrypoint": "scripts/main.py",
+  "permissions_required": [
+    "skills:data_analyst:EXECUTE"
+  ],
+  "parameters_schema": {
+    "series": "array of numbers or array of objects with value/price",
+    "risk_free_rate": "number (default: 0.05)"
+  },
+  "returns_schema": {
+    "status": "string",
+    "count": "integer",
+    "mean": "number",
+    "std_dev": "number",
+    "max_drawdown": "number",
+    "sharpe_ratio": "number",
+    "summary": "string"
+  },
+  "tags": ["finance", "statistics", "quant", "analysis", "metrics"],
+  "is_enabled": true
+}

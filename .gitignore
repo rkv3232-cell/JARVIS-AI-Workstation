@@ -27,6 +27,7 @@ data/*.json
 data/*.db
 data/backups/
 data/staging/
+data/browser_profile/
 !data/.gitkeep
 
 # Build and Packaging Outputs
