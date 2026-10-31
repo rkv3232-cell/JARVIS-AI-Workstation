@@ -234,6 +234,19 @@ class JarvisClient {
     this.fetchMarketOverview();
     setInterval(() => this.fetchMarketOverview(), 5000);
 
+    // Upgraded Subsystem Initializers
+    this.initTabs();
+    this.initPrivacyControls();
+    this.initVoiceInterruption();
+    this.initConfirmationModal();
+    this.initStrategyLab();
+    this.initPaperTrading();
+    this.initPsychologyJournal();
+    this.initResearchWorkspace();
+    this.initMemoryBrain();
+    this.initWorkflowStudio();
+    this.initSecurityAndUpdater();
+
     // Lock window position to origin (0, 0) so top navbar never scrolls off-screen
     window.scrollTo(0, 0);
     window.addEventListener("scroll", () => {
@@ -360,6 +373,21 @@ class JarvisClient {
       this.renderMorningBriefing(msg.payload);
     } else if (msg.event === "market_overview") {
       this.renderMarketOverview(msg.payload);
+    } else if (msg.event === "ping") {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ event: "pong", timestamp: Date.now() }));
+      }
+    } else if (msg.event === "voice_state") {
+      const state = msg.payload?.state || "IDLE";
+      const pill = document.getElementById("voice-state-text");
+      if (pill) pill.textContent = state;
+      const stopBtn = document.getElementById("voice-interrupt-btn");
+      if (stopBtn) {
+        stopBtn.style.display = (state === "SPEAKING" || state === "THINKING") ? "inline-flex" : "none";
+      }
+    } else if (msg.event === "action_confirmation" || (msg.event === "dynamic_widget" && msg.payload?.type === "action_confirmation")) {
+      const actionData = msg.payload?.data || msg.payload;
+      this.showConfirmationModal(actionData);
     }
   }
 
@@ -2320,6 +2348,783 @@ class JarvisClient {
         if (cmd) this.sendUserMessage(cmd);
       });
     });
+  }
+
+  // =========================================================================
+  // UPGRADED SUB-SYSTEM CONTROLLERS & EVENT BINDINGS
+  // =========================================================================
+
+  initTabs() {
+    document.querySelectorAll(".nav-tab-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const tabId = btn.getAttribute("data-tab");
+        document.querySelectorAll(".nav-tab-btn").forEach(b => b.classList.remove("active"));
+        document.querySelectorAll(".tab-view").forEach(v => v.classList.remove("active"));
+        btn.classList.add("active");
+        const view = document.getElementById(tabId);
+        if (view) view.classList.add("active");
+
+        if (tabId === "tab-health") this.fetchHealthDiagnostics();
+        else if (tabId === "tab-models") this.fetchModelTelemetry();
+        else if (tabId === "tab-paper") this.fetchPaperPortfolio();
+        else if (tabId === "tab-psychology") this.fetchPsychologyAnalytics();
+        else if (tabId === "tab-research") this.fetchResearchJobs();
+        else if (tabId === "tab-memory") this.fetchMemoryList();
+        else if (tabId === "tab-workflows") this.fetchWorkflows();
+        else if (tabId === "tab-security") this.fetchAuditLogs();
+      });
+    });
+  }
+
+  initPrivacyControls() {
+    const micBtn = document.getElementById("privacy-mic-btn");
+    const screenBtn = document.getElementById("privacy-screen-btn");
+    const secMicBtn = document.getElementById("sec-mic-toggle");
+    const secScreenBtn = document.getElementById("sec-screen-toggle");
+    const secWakeBtn = document.getElementById("sec-wake-toggle");
+
+    const updateUI = (status) => {
+      if (micBtn) {
+        micBtn.textContent = status.mic_kill_switch ? "🎙️ MIC: KILLED" : "🎙️ MIC: ON";
+        micBtn.classList.toggle("killed", status.mic_kill_switch);
+      }
+      if (secMicBtn) {
+        secMicBtn.textContent = status.mic_kill_switch ? "Killed (Blocked)" : "Active (Enabled)";
+        secMicBtn.classList.toggle("danger-btn", status.mic_kill_switch);
+      }
+      if (screenBtn) {
+        screenBtn.textContent = status.screen_kill_switch ? "👁️ SCREEN: KILLED" : "👁️ SCREEN: ON";
+        screenBtn.classList.toggle("killed", status.screen_kill_switch);
+      }
+      if (secScreenBtn) {
+        secScreenBtn.textContent = status.screen_kill_switch ? "Killed (Blocked)" : "Active (Enabled)";
+        secScreenBtn.classList.toggle("danger-btn", status.screen_kill_switch);
+      }
+      if (secWakeBtn) {
+        secWakeBtn.textContent = status.wake_listener_active ? "Listening (Active)" : "Disabled (Off)";
+        secWakeBtn.classList.toggle("primary-btn", status.wake_listener_active);
+      }
+    };
+
+    fetch("/api/privacy/status")
+      .then(r => r.json())
+      .then(s => updateUI(s))
+      .catch(() => {});
+
+    const toggle = (target, currentState) => {
+      fetch("/api/privacy/kill-switch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target: target, state: !currentState })
+      })
+      .then(r => r.json())
+      .then(res => {
+        if (res.status) updateUI(res.status);
+      });
+    };
+
+    if (micBtn) micBtn.onclick = () => toggle("mic", !micBtn.classList.contains("killed"));
+    if (secMicBtn) secMicBtn.onclick = () => toggle("mic", !secMicBtn.classList.contains("danger-btn"));
+    if (screenBtn) screenBtn.onclick = () => toggle("screen", !screenBtn.classList.contains("killed"));
+    if (secScreenBtn) secScreenBtn.onclick = () => toggle("screen", !secScreenBtn.classList.contains("danger-btn"));
+    if (secWakeBtn) {
+      secWakeBtn.onclick = () => {
+        const isCurrentActive = secWakeBtn.textContent.includes("Active");
+        toggle("wake", isCurrentActive);
+      };
+    }
+  }
+
+  initVoiceInterruption() {
+    const stopBtn = document.getElementById("voice-interrupt-btn");
+    const ttsPlayer = document.getElementById("tts-player");
+    const voiceStateText = document.getElementById("voice-state-text");
+
+    const interruptSpeech = () => {
+      if (ttsPlayer) {
+        ttsPlayer.pause();
+        ttsPlayer.currentTime = 0;
+        ttsPlayer.src = "";
+      }
+      if (stopBtn) stopBtn.style.display = "none";
+      if (voiceStateText) voiceStateText.textContent = "INTERRUPTED";
+
+      fetch("/api/voice/interrupt", { method: "POST" })
+        .then(r => r.json())
+        .then(() => {
+          setTimeout(() => {
+            if (voiceStateText) voiceStateText.textContent = "LISTENING";
+          }, 400);
+        })
+        .catch(() => {});
+    };
+
+    if (stopBtn) stopBtn.onclick = interruptSpeech;
+
+    if (ttsPlayer) {
+      ttsPlayer.onplay = () => {
+        if (stopBtn) stopBtn.style.display = "inline-flex";
+        if (voiceStateText) voiceStateText.textContent = "SPEAKING";
+      };
+      ttsPlayer.onended = () => {
+        if (stopBtn) stopBtn.style.display = "none";
+        if (voiceStateText) voiceStateText.textContent = "IDLE";
+      };
+      ttsPlayer.onerror = () => {
+        if (stopBtn) stopBtn.style.display = "none";
+        if (voiceStateText) voiceStateText.textContent = "IDLE";
+      };
+    }
+
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && ttsPlayer && !ttsPlayer.paused) {
+        interruptSpeech();
+      }
+    });
+  }
+
+  initConfirmationModal() {
+    this.currentPendingActionId = null;
+    this.confirmTimer = null;
+    const modal = document.getElementById("confirmation-modal");
+    const approveBtn = document.getElementById("confirm-approve-btn");
+    const denyBtn = document.getElementById("confirm-deny-btn");
+
+    if (approveBtn) {
+      approveBtn.onclick = () => {
+        if (!this.currentPendingActionId) return;
+        fetch("/api/os/confirm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action_id: this.currentPendingActionId })
+        })
+        .then(r => r.json())
+        .then(res => {
+          modal.style.display = "none";
+          clearInterval(this.confirmTimer);
+          const msg = res.result?.message || "Action executed successfully.";
+          this.renderChatMessage("JARVIS", `✅ ${msg}`, false);
+        })
+        .catch(err => {
+          alert("Approval failed: " + err);
+        });
+      };
+    }
+
+    if (denyBtn) {
+      denyBtn.onclick = () => {
+        if (!this.currentPendingActionId) return;
+        fetch("/api/os/reject", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action_id: this.currentPendingActionId })
+        })
+        .then(() => {
+          modal.style.display = "none";
+          clearInterval(this.confirmTimer);
+          this.renderChatMessage("JARVIS", "❌ कार्रवाई उपयोगकर्ता द्वारा अस्वीकार कर दी गई।", false);
+        });
+      };
+    }
+  }
+
+  showConfirmationModal(pendingAction) {
+    const modal = document.getElementById("confirmation-modal");
+    const desc = document.getElementById("confirm-description");
+    const details = document.getElementById("confirm-details");
+    const timerEl = document.getElementById("confirm-time-left");
+
+    if (!modal || !pendingAction) return;
+    this.currentPendingActionId = pendingAction.action_id;
+    if (desc) desc.textContent = pendingAction.description;
+    if (details) {
+      details.innerHTML = `
+        <div><strong>Action:</strong> ${pendingAction.action_type}</div>
+        <div><strong>Target:</strong> ${pendingAction.target}</div>
+        <div><strong>Risk Level:</strong> <span class="badge warning-badge">${pendingAction.risk_level.toUpperCase()}</span></div>
+        <div><strong>ID:</strong> ${pendingAction.action_id}</div>
+      `;
+    }
+
+    let remaining = pendingAction.remaining_seconds || 60;
+    if (timerEl) timerEl.textContent = remaining;
+    modal.style.display = "flex";
+
+    clearInterval(this.confirmTimer);
+    this.confirmTimer = setInterval(() => {
+      remaining -= 1;
+      if (timerEl) timerEl.textContent = remaining;
+      if (remaining <= 0) {
+        clearInterval(this.confirmTimer);
+        modal.style.display = "none";
+      }
+    }, 1000);
+  }
+
+  async fetchHealthDiagnostics() {
+    const container = document.getElementById("health-grid-content");
+    const refreshBtn = document.getElementById("refresh-health-btn");
+    if (refreshBtn) refreshBtn.onclick = () => this.fetchHealthDiagnostics();
+    if (!container) return;
+
+    try {
+      const res = await fetch("/api/health/diagnostics");
+      const data = await res.json();
+      const p = data.process || {};
+      const h = data.hardware || {};
+      const ai = data.ai_providers || {};
+      const db = data.database || {};
+      const wsCount = data.websocket?.active_clients || 0;
+
+      let aiHtml = "";
+      for (const [provider, info] of Object.entries(ai)) {
+        const isOnline = info.status === "ONLINE";
+        const color = isOnline ? "var(--emerald-profit)" : "var(--rose-loss)";
+        aiHtml += `
+          <div style="display:flex; justify-content:space-between; font-size:0.75rem; margin-bottom:4px;">
+            <span>${provider}</span>
+            <span style="color:${color}; font-weight:700;">${info.status} ${info.latency_ms ? `(${info.latency_ms}ms)` : ""}</span>
+          </div>
+        `;
+      }
+
+      container.innerHTML = `
+        <div class="glass-card">
+          <h3>Hardware & Resources</h3>
+          <p><strong>CPU Total:</strong> ${h.cpu_total_percent}% (${h.cpu_cores_logical} Cores)</p>
+          <p><strong>RAM Usage:</strong> ${h.ram_used_gb} GB / ${h.ram_total_gb} GB (${h.ram_percent}%)</p>
+          <p><strong>Disk Usage:</strong> ${h.disk_used_gb} GB / ${h.disk_total_gb} GB (${h.disk_percent}%)</p>
+        </div>
+        <div class="glass-card">
+          <h3>Process Footprint</h3>
+          <p><strong>PID:</strong> ${p.pid}</p>
+          <p><strong>Process RAM (RSS):</strong> ${p.memory_rss_mb} MB</p>
+          <p><strong>Threads:</strong> ${p.threads_count}</p>
+          <p><strong>Uptime:</strong> ${Math.floor(data.server_uptime_seconds / 60)} minutes</p>
+          <p><strong>Active WebSockets:</strong> ${wsCount}</p>
+        </div>
+        <div class="glass-card">
+          <h3>AI Providers Latency Matrix</h3>
+          ${aiHtml}
+        </div>
+        <div class="glass-card">
+          <h3>Database & Integrity</h3>
+          <p><strong>Status:</strong> <span style="color:var(--emerald-profit);">${db.status?.toUpperCase()}</span></p>
+          <p><strong>Integrity:</strong> ${db.integrity}</p>
+          <p><strong>Size:</strong> ${db.size_kb} KB</p>
+          <p><strong>Recent Errors (1h):</strong> ${data.recent_errors?.last_hour_count || 0}</p>
+        </div>
+      `;
+    } catch (e) {
+      container.innerHTML = `<div class="error-msg">Failed to load diagnostics: ${e}</div>`;
+    }
+  }
+
+  async fetchModelTelemetry() {
+    const container = document.getElementById("models-grid-content");
+    const refreshBtn = document.getElementById("refresh-models-btn");
+    if (refreshBtn) refreshBtn.onclick = () => this.fetchModelTelemetry();
+    if (!container) return;
+
+    try {
+      const res = await fetch("/api/models/telemetry");
+      const data = await res.json();
+      const circuits = data.circuits || {};
+
+      let html = "";
+      for (const [key, cb] of Object.entries(circuits)) {
+        const isClosed = cb.state === "CLOSED";
+        const stateColor = isClosed ? "var(--emerald-profit)" : (cb.state === "OPEN" ? "var(--rose-loss)" : "var(--amber-warning)");
+        html += `
+          <div class="glass-card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <h3 style="margin:0;">${cb.name}</h3>
+              <span class="badge" style="background:${stateColor}22; color:${stateColor}; border:1px solid ${stateColor};">${cb.state}</span>
+            </div>
+            <p><strong>Total Requests:</strong> ${cb.total_requests}</p>
+            <p><strong>Successful:</strong> ${cb.successful_requests}</p>
+            <p><strong>Failures:</strong> ${cb.failure_count}</p>
+            <p><strong>Average Latency:</strong> ${cb.avg_latency_ms} ms</p>
+          </div>
+        `;
+      }
+
+      container.innerHTML = html;
+    } catch (e) {
+      container.innerHTML = `<div class="error-msg">Failed to load model telemetry: ${e}</div>`;
+    }
+  }
+
+  initStrategyLab() {
+    const runBtn = document.getElementById("run-backtest-btn");
+    if (!runBtn) return;
+
+    runBtn.onclick = async () => {
+      const strat = document.getElementById("bt-strategy-select").value;
+      const sym = document.getElementById("bt-symbol-select").value;
+      const cap = parseFloat(document.getElementById("bt-capital").value) || 1000000;
+      const slip = parseFloat(document.getElementById("bt-slippage").value) || 0.05;
+      const fee = parseFloat(document.getElementById("bt-fee").value) || 0.03;
+      const outView = document.getElementById("strategy-results-view");
+
+      outView.innerHTML = "<div class='loading-state'>Running quantitative backtest simulation...</div>";
+      runBtn.disabled = true;
+
+      try {
+        const res = await fetch("/api/trading/backtest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            symbol: sym,
+            strategy_name: strat,
+            initial_capital: cap,
+            slippage_pct: slip,
+            fee_pct: fee
+          })
+        });
+        const data = await res.json();
+        runBtn.disabled = false;
+
+        if (!data.success) {
+          outView.innerHTML = `<div class="error-msg">Backtest error: ${data.error || "Simulation failed"}</div>`;
+          return;
+        }
+
+        const fp = data.full_period;
+        const wf = data.walk_forward_validation;
+        const retColor = fp.total_return_pct >= 0 ? "var(--emerald-profit)" : "var(--rose-loss)";
+
+        outView.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border-subtle); padding-bottom:6px; margin-bottom:8px;">
+            <h3 style="margin:0;">Backtest Performance: ${data.strategy} (${sym})</h3>
+            <span class="badge ${wf.is_robust ? 'buy-btn' : 'warning-badge'}">Walk-Forward: ${wf.is_robust ? 'ROBUST MODEL' : 'CURVE-FITTED'}</span>
+          </div>
+          <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; margin-bottom:10px;">
+            <div class="fno-item"><span class="fno-label">WIN RATE</span><span class="fno-val" style="color:var(--cyan-neon);">${fp.win_rate_pct}%</span></div>
+            <div class="fno-item"><span class="fno-label">PROFIT FACTOR</span><span class="fno-val" style="color:var(--emerald-profit);">${fp.profit_factor}</span></div>
+            <div class="fno-item"><span class="fno-label">NET RETURN</span><span class="fno-val" style="color:${retColor};">${fp.total_return_pct}%</span></div>
+            <div class="fno-item"><span class="fno-label">MAX DRAWDOWN</span><span class="fno-val" style="color:var(--rose-loss);">${fp.max_drawdown_pct}%</span></div>
+          </div>
+          <div style="font-size:0.75rem; color:var(--text-secondary); margin-bottom:8px;">
+            Total Trades: <strong>${fp.total_trades}</strong> (Wins: ${fp.winning_trades}, Losses: ${fp.losing_trades}) | Sharpe Ratio: <strong>${fp.sharpe_ratio}</strong>
+          </div>
+          <p style="font-size:0.65rem; color:var(--text-muted);">${data.disclaimer}</p>
+        `;
+      } catch (err) {
+        runBtn.disabled = false;
+        outView.innerHTML = `<div class="error-msg">Execution error: ${err}</div>`;
+      }
+    };
+  }
+
+  initPaperTrading() {
+    const buyBtn = document.getElementById("btn-paper-buy");
+    const sellBtn = document.getElementById("btn-paper-sell");
+    const resetBtn = document.getElementById("reset-paper-btn");
+
+    const placeOrder = (side) => {
+      const sym = document.getElementById("order-symbol").value;
+      const qty = parseInt(document.getElementById("order-qty").value) || 1;
+      const orderType = document.getElementById("order-type").value;
+      const sl = parseFloat(document.getElementById("order-sl").value) || null;
+
+      fetch("/api/trading/paper/order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          symbol: sym,
+          side: side,
+          quantity: qty,
+          order_type: orderType,
+          stop_loss: sl
+        })
+      })
+      .then(r => r.json())
+      .then(res => {
+        if (res.success) {
+          alert(`Order Filled: ${side} ${qty} ${sym} @ ₹${res.executed_price}`);
+          this.fetchPaperPortfolio();
+        } else {
+          alert(`Order Rejected: ${res.error}`);
+        }
+      });
+    };
+
+    if (buyBtn) buyBtn.onclick = () => placeOrder("BUY");
+    if (sellBtn) sellBtn.onclick = () => placeOrder("SELL");
+    if (resetBtn) {
+      resetBtn.onclick = () => {
+        if (confirm("Reset simulated paper account back to ₹10,00,000 INR?")) {
+          fetch("/api/trading/paper/reset", { method: "POST" })
+            .then(r => r.json())
+            .then(res => {
+              alert(res.message);
+              this.fetchPaperPortfolio();
+            });
+        }
+      };
+    }
+  }
+
+  async fetchPaperPortfolio() {
+    const sumEl = document.getElementById("paper-summary-content");
+    const posEl = document.getElementById("paper-positions-content");
+    if (!sumEl) return;
+
+    try {
+      const res = await fetch("/api/trading/paper/portfolio");
+      const data = await res.json();
+
+      const pnlColor = data.total_pnl >= 0 ? "var(--emerald-profit)" : "var(--rose-loss)";
+      sumEl.innerHTML = `
+        <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:8px;">
+          <div><span class="fno-label">CASH BALANCE</span><div style="font-size:1.1rem; font-weight:700;">₹${data.cash_balance.toLocaleString('en-IN')}</div></div>
+          <div><span class="fno-label">INVESTED VALUE</span><div style="font-size:1.1rem; font-weight:700;">₹${data.invested_value.toLocaleString('en-IN')}</div></div>
+          <div><span class="fno-label">TOTAL EQUITY</span><div style="font-size:1.1rem; font-weight:700; color:var(--cyan-neon);">₹${data.total_portfolio_equity.toLocaleString('en-IN')}</div></div>
+          <div><span class="fno-label">TOTAL P&L</span><div style="font-size:1.1rem; font-weight:700; color:${pnlColor};">₹${data.total_pnl.toLocaleString('en-IN')} (${data.total_pnl_pct}%)</div></div>
+        </div>
+      `;
+
+      if (posEl) {
+        if (!data.positions || data.positions.length === 0) {
+          posEl.innerHTML = "<p class='placeholder-text'>No active open positions. Place an order above.</p>";
+        } else {
+          let rows = data.positions.map(p => `
+            <tr>
+              <td><strong>${p.symbol}</strong></td>
+              <td><span class="badge ${p.side === 'LONG' ? 'buy-btn' : 'sell-btn'}">${p.side}</span></td>
+              <td>${p.quantity}</td>
+              <td>₹${p.avg_entry_price}</td>
+              <td>₹${p.current_price}</td>
+              <td style="color:${p.unrealized_pnl >= 0 ? 'var(--emerald-profit)' : 'var(--rose-loss)'}; font-weight:700;">
+                ₹${p.unrealized_pnl} (${p.pnl_pct}%)
+              </td>
+            </tr>
+          `).join("");
+
+          posEl.innerHTML = `
+            <table>
+              <thead>
+                <tr><th>Symbol</th><th>Side</th><th>Qty</th><th>Entry Price</th><th>Current Price</th><th>Unrealized P&L</th></tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          `;
+        }
+      }
+    } catch (e) {
+      sumEl.innerHTML = `<div class="error-msg">Failed to load paper portfolio: ${e}</div>`;
+    }
+  }
+
+  initPsychologyJournal() {
+    const saveBtn = document.getElementById("save-psychology-btn");
+    if (!saveBtn) return;
+
+    saveBtn.onclick = () => {
+      const em = document.getElementById("psy-emotion").value;
+      const notes = document.getElementById("psy-notes").value;
+      const c1 = document.getElementById("check-1").checked;
+      const c2 = document.getElementById("check-2").checked;
+      const c3 = document.getElementById("check-3").checked;
+      const c4 = document.getElementById("check-4").checked;
+
+      fetch("/api/trading/psychology/entry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          symbol: this.currentSymbol || "NIFTY50",
+          action: "NOTE",
+          emotion_tag: em,
+          checklist_answers: [c1, c2, c3, c4],
+          notes: notes
+        })
+      })
+      .then(r => r.json())
+      .then(res => {
+        alert(res.message);
+        document.getElementById("psy-notes").value = "";
+        this.fetchPsychologyAnalytics();
+      });
+    };
+  }
+
+  async fetchPsychologyAnalytics() {
+    const container = document.getElementById("psychology-analytics-content");
+    if (!container) return;
+
+    try {
+      const res = await fetch("/api/trading/psychology/analytics");
+      const data = await res.json();
+
+      const scoreColor = data.avg_discipline_score >= 70 ? "var(--emerald-profit)" : "var(--amber-warning)";
+      container.innerHTML = `
+        <h3>Mental Discipline Dashboard</h3>
+        <div style="display:flex; align-items:center; gap:1.5rem; margin:1rem 0;">
+          <div style="font-size:2.4rem; font-weight:800; color:${scoreColor}; font-family:var(--font-display);">
+            ${data.avg_discipline_score} <span style="font-size:1rem; color:var(--text-muted);">/100</span>
+          </div>
+          <div>
+            <div style="font-weight:700; color:${scoreColor};">${data.risk_advisory}</div>
+            <div style="font-size:0.75rem; color:var(--text-secondary);">Total Journal Entries: ${data.total_entries} | Top Emotion: ${data.top_emotion}</div>
+          </div>
+        </div>
+      `;
+    } catch (e) {}
+  }
+
+  initResearchWorkspace() {
+    const startBtn = document.getElementById("start-research-btn");
+    if (!startBtn) return;
+
+    startBtn.onclick = () => {
+      const topic = document.getElementById("research-topic-input").value.trim();
+      const mode = document.getElementById("research-mode-select").value;
+      if (!topic) {
+        alert("Please enter a research topic.");
+        return;
+      }
+      this.sendUserMessage(`${topic} ka complete research report banao`);
+      document.querySelector('[data-tab="tab-command"]')?.click();
+    };
+  }
+
+  async fetchResearchJobs() {
+    const container = document.getElementById("research-jobs-list");
+    if (!container) return;
+
+    try {
+      const res = await fetch("/api/research/jobs");
+      const data = await res.json();
+      const jobs = data.jobs || [];
+
+      if (jobs.length === 0) {
+        container.innerHTML = "<p class='placeholder-text'>No research monographs generated yet.</p>";
+        return;
+      }
+
+      let rows = jobs.map(j => `
+        <tr>
+          <td><strong>${j.topic}</strong></td>
+          <td><span class="badge">${j.mode}</span></td>
+          <td><span class="badge ${j.status === 'COMPLETED' ? 'buy-btn' : 'warning-badge'}">${j.status}</span></td>
+          <td>${j.progress}%</td>
+          <td>${j.current_step || '-'}</td>
+        </tr>
+      `).join("");
+
+      container.innerHTML = `
+        <table>
+          <thead><tr><th>Subject</th><th>Mode</th><th>Status</th><th>Progress</th><th>Step</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    } catch (e) {
+      container.innerHTML = `<div class="error-msg">Failed to load jobs: ${e}</div>`;
+    }
+  }
+
+  initMemoryBrain() {
+    const exportBtn = document.getElementById("export-memory-btn");
+    const addBtn = document.getElementById("add-memory-btn");
+    const searchInput = document.getElementById("memory-search-input");
+    const catFilter = document.getElementById("memory-category-filter");
+
+    if (exportBtn) {
+      exportBtn.onclick = () => {
+        window.open("/api/memory/export", "_blank");
+      };
+    }
+
+    if (addBtn) {
+      addBtn.onclick = () => {
+        const text = prompt("Enter persistent fact / memory to store in J.A.R.V.I.S. Brain:");
+        if (text) {
+          fetch("/api/memory", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ category: "user_approved_memories", content: text })
+          })
+          .then(r => r.json())
+          .then(() => this.fetchMemoryList());
+        }
+      };
+    }
+
+    if (searchInput) {
+      searchInput.oninput = () => {
+        this.fetchMemoryList(searchInput.value, catFilter.value);
+      };
+    }
+
+    if (catFilter) {
+      catFilter.onchange = () => {
+        this.fetchMemoryList(searchInput.value, catFilter.value);
+      };
+    }
+  }
+
+  async fetchMemoryList(query = "", category = "") {
+    const container = document.getElementById("memory-items-list");
+    if (!container) return;
+
+    try {
+      let url = "/api/memory";
+      if (query) url = `/api/memory/search?q=${encodeURIComponent(query)}`;
+      if (category) url += (url.includes("?") ? `&category=${category}` : `?category=${category}`);
+
+      const res = await fetch(url);
+      const data = await res.json();
+      const items = data.memories || data.results || [];
+
+      if (items.length === 0) {
+        container.innerHTML = "<p class='placeholder-text'>No memories found matching filter.</p>";
+        return;
+      }
+
+      let rows = items.map(m => `
+        <tr>
+          <td><span class="badge">${m.category}</span></td>
+          <td>${m.content}</td>
+          <td><button class="action-btn danger-btn" onclick="window.jarvis.deleteMemoryItem('${m.id}')">Delete</button></td>
+        </tr>
+      `).join("");
+
+      container.innerHTML = `
+        <table>
+          <thead><tr><th>Category</th><th>Memory Content</th><th>Action</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    } catch (e) {
+      container.innerHTML = `<div class="error-msg">Failed to load memories: ${e}</div>`;
+    }
+  }
+
+  deleteMemoryItem(id) {
+    if (confirm("Delete this memory node from SQLite?")) {
+      fetch(`/api/memory/${id}`, { method: "DELETE" })
+        .then(() => this.fetchMemoryList());
+    }
+  }
+
+  initWorkflowStudio() {}
+
+  async fetchWorkflows() {
+    const container = document.getElementById("workflow-templates-grid");
+    const histContainer = document.getElementById("workflow-history-list");
+    if (!container) return;
+
+    try {
+      const res = await fetch("/api/workflows");
+      const data = await res.json();
+      const list = data.workflows || [];
+
+      container.innerHTML = list.map(wf => `
+        <div class="glass-card">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3 style="margin:0;">${wf.name}</h3>
+            <span class="badge">${wf.trigger_type}</span>
+          </div>
+          <p style="font-size:0.75rem; color:var(--text-secondary); margin:6px 0;">${wf.description || ''}</p>
+          <div style="font-size:0.72rem; color:var(--text-muted); margin-bottom:8px;">Action: <code>${wf.action_type}</code></div>
+          <div style="display:flex; gap:6px;">
+            <button class="action-btn primary-btn" onclick="window.jarvis.runWorkflow('${wf.id}', false)">▶ Run</button>
+            <button class="action-btn" onclick="window.jarvis.runWorkflow('${wf.id}', true)">🧪 Dry-Run</button>
+          </div>
+        </div>
+      `).join("");
+
+      if (histContainer) {
+        const hRes = await fetch("/api/workflows/history");
+        const hData = await hRes.json();
+        const runs = hData.history || [];
+        if (runs.length === 0) {
+          histContainer.innerHTML = "<p class='placeholder-text'>No workflow executions logged yet.</p>";
+        } else {
+          histContainer.innerHTML = `
+            <table>
+              <thead><tr><th>Workflow</th><th>Type</th><th>Status</th><th>Duration</th></tr></thead>
+              <tbody>
+                ${runs.map(r => `
+                  <tr>
+                    <td><strong>${r.workflow_name || r.workflow_id}</strong></td>
+                    <td>${r.is_dry_run ? 'Dry-Run' : 'Real Execution'}</td>
+                    <td><span class="badge ${r.status === 'COMPLETED' ? 'buy-btn' : 'sell-btn'}">${r.status}</span></td>
+                    <td>${Math.round((r.completed_at - r.started_at)*1000)}ms</td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          `;
+        }
+      }
+    } catch (e) {}
+  }
+
+  async runWorkflow(wfId, isDryRun) {
+    const url = isDryRun ? `/api/workflows/${wfId}/dry-run` : `/api/workflows/${wfId}/run`;
+    try {
+      const res = await fetch(url, { method: "POST" });
+      const data = await res.json();
+      alert(`Workflow ${data.status}:
+${data.message || JSON.stringify(data.trace)}`);
+      this.fetchWorkflows();
+    } catch (e) {
+      alert("Workflow execution error: " + e);
+    }
+  }
+
+  initSecurityAndUpdater() {
+    const chkBtn = document.getElementById("check-update-btn");
+    if (chkBtn) {
+      chkBtn.onclick = () => {
+        chkBtn.textContent = "Checking...";
+        fetch("/api/updater/check")
+          .then(r => r.json())
+          .then(res => {
+            chkBtn.textContent = "Check for Updates";
+            alert(`J.A.R.V.I.S. Updater Status:
+Current Version: ${res.current_version}
+Update Available: ${res.update_available ? 'Yes (' + res.remote_version + ')' : 'No (Already on latest build)'}`);
+          });
+      };
+    }
+  }
+
+  async fetchAuditLogs() {
+    const container = document.getElementById("audit-log-content");
+    if (!container) return;
+
+    try {
+      const res = await fetch("/api/security/audit-logs");
+      const data = await res.json();
+      const logs = data.audit_logs || [];
+
+      if (logs.length === 0) {
+        container.innerHTML = "<p class='placeholder-text'>No audit events recorded.</p>";
+        return;
+      }
+
+      let rows = logs.map(l => `
+        <tr>
+          <td>${l.timestamp}</td>
+          <td><strong>${l.action_type}</strong></td>
+          <td>${l.target}</td>
+          <td><span class="badge ${l.risk_level === 'high' ? 'danger-btn' : ''}">${l.risk_level}</span></td>
+          <td><span class="badge ${l.status === 'success' ? 'buy-btn' : 'sell-btn'}">${l.status}</span></td>
+        </tr>
+      `).join("");
+
+      container.innerHTML = `
+        <table>
+          <thead><tr><th>Timestamp</th><th>Action Type</th><th>Target</th><th>Risk</th><th>Status</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    } catch (e) {
+      container.innerHTML = `<div class="error-msg">Failed to load audit logs: ${e}</div>`;
+    }
   }
 }
 

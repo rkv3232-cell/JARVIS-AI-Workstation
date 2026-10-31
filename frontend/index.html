@@ -43,29 +43,26 @@
       <div class="brand">
         <div class="status-indicator online"></div>
         <div class="brand-text">
-          <h1>JARVIS <span class="badge">APEX 2.0</span></h1>
+          <h1>JARVIS <span class="badge">APEX 2.1</span></h1>
           <p class="subtitle">TRADER • CODER • AUTONOMOUS WORKSTATION</p>
         </div>
       </div>
 
-      <!-- Compact Developer & Hardware Telemetry Strip -->
+      <!-- Privacy & Voice State Real-time Indicator Strip -->
       <div class="header-telemetry-strip">
-        <div class="telemetry-pill">
-          <span class="pill-label">CPU</span>
-          <span class="pill-val cyan" id="cpu-val">0%</span>
+        <div class="telemetry-pill" id="voice-state-pill" title="Current Voice State">
+          <span class="pill-label">VOICE</span>
+          <span class="pill-val cyan" id="voice-state-text">IDLE</span>
         </div>
-        <div class="telemetry-pill">
-          <span class="pill-label">RAM</span>
-          <span class="pill-val violet" id="ram-val">0%</span>
-        </div>
-        <div class="telemetry-pill">
-          <span class="pill-label">NET</span>
-          <span class="pill-val emerald" id="net-up">0.0 MB/s</span>
-        </div>
-        <div class="telemetry-pill">
-          <span class="pill-label">FIREBASE</span>
-          <span class="pill-val amber" id="fb-status">LIVE</span>
-        </div>
+        <button class="voice-stop-btn" id="voice-interrupt-btn" title="Interrupt Voice Playback" style="display:none;">
+          ⏹️ STOP
+        </button>
+        <button class="privacy-toggle-btn active" id="privacy-mic-btn" title="Microphone Privacy Kill Switch">
+          🎙️ MIC: ON
+        </button>
+        <button class="privacy-toggle-btn active" id="privacy-screen-btn" title="Screen Vision Privacy Kill Switch">
+          👁️ SCREEN: ON
+        </button>
       </div>
 
       <div class="nav-controls">
@@ -79,190 +76,543 @@
       </div>
     </header>
 
-    <!-- Main Grid Dashboard: 3 Balanced Workstation Columns -->
-    <main class="dashboard-grid">
-      
-      <!-- LEFT COLUMN: WATCHLIST, OPTION CHAIN & CODER ACTIONS -->
-      <section class="panel glass-card left-radar-panel">
-        <div class="panel-header">
-          <div class="header-title">
-            <span class="panel-icon">📊</span>
-            <h2>MARKET RADAR & F&O</h2>
-          </div>
-          <button class="refresh-radar-btn" id="refresh-radar-btn" title="Refresh Live Data">↻</button>
-        </div>
+    <!-- Navigation Tab Bar -->
+    <nav class="sub-nav-tabs">
+      <button class="nav-tab-btn active" data-tab="tab-command">🖥️ Command Center</button>
+      <button class="nav-tab-btn" data-tab="tab-health">🩺 Health Center</button>
+      <button class="nav-tab-btn" data-tab="tab-models">⚡ AI Providers</button>
+      <button class="nav-tab-btn" data-tab="tab-strategy">📈 Strategy Lab</button>
+      <button class="nav-tab-btn" data-tab="tab-paper">💼 Paper Portfolio</button>
+      <button class="nav-tab-btn" data-tab="tab-psychology">🧠 Psychology</button>
+      <button class="nav-tab-btn" data-tab="tab-research">🔬 Research Lab</button>
+      <button class="nav-tab-btn" data-tab="tab-memory">💾 Memory Brain</button>
+      <button class="nav-tab-btn" data-tab="tab-workflows">⚡ Workflows</button>
+      <button class="nav-tab-btn" data-tab="tab-security">⚙️ Security</button>
+    </nav>
 
-        <!-- Watchlist Tickers -->
-        <div class="watchlist-section" id="watchlist-chips">
-          <div class="ticker-chip active" data-symbol="NIFTY50">
-            <div class="chip-info">
-              <span class="chip-sym">NIFTY 50</span>
-              <span class="chip-tag">NSE INDEX</span>
+    <!-- ================================================================= -->
+    <!-- TAB 1: COMMAND CENTER (Default 3-Column Workstation) -->
+    <!-- ================================================================= -->
+    <div class="tab-view active" id="tab-command">
+      <main class="dashboard-grid">
+        <!-- LEFT COLUMN: WATCHLIST, OPTION CHAIN & CODER ACTIONS -->
+        <section class="panel glass-card left-radar-panel">
+          <div class="panel-header">
+            <div class="header-title">
+              <span class="panel-icon">📊</span>
+              <h2>MARKET RADAR & F&O</h2>
             </div>
-            <span class="chip-price" id="price-nifty50">Fetching...</span>
-          </div>
-          <div class="ticker-chip" data-symbol="BANKNIFTY">
-            <div class="chip-info">
-              <span class="chip-sym">BANKNIFTY</span>
-              <span class="chip-tag">NSE BANK</span>
-            </div>
-            <span class="chip-price" id="price-banknifty">Fetching...</span>
-          </div>
-          <div class="ticker-chip" data-symbol="BTCUSDT">
-            <div class="chip-info">
-              <span class="chip-sym">BTC / USDT</span>
-              <span class="chip-tag">BINANCE</span>
-            </div>
-            <span class="chip-price" id="price-btcusdt">Fetching...</span>
-          </div>
-        </div>
-
-        <!-- Option Chain / F&O Card -->
-        <div class="fno-card">
-          <div class="fno-header">
-            <span class="fno-title">OPTION CHAIN TELEMETRY</span>
-            <span class="fno-badge" id="opt-sentiment-badge">NEUTRAL</span>
-          </div>
-          <div class="fno-metrics">
-            <div class="fno-item">
-              <span class="fno-label">PCR</span>
-              <span class="fno-val" id="opt-pcr">1.02</span>
-            </div>
-            <div class="fno-item">
-              <span class="fno-label">MAX PAIN</span>
-              <span class="fno-val" id="opt-maxpain">24,350</span>
-            </div>
-            <div class="fno-item">
-              <span class="fno-label">INDIA VIX</span>
-              <span class="fno-val" id="opt-vix">--</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- SMC Signals List -->
-        <div class="panel-sub-header">
-          <span>INSTITUTIONAL SMC ALERTS</span>
-        </div>
-        <div class="signals-list" id="signals-list">
-          <div class="empty-signals">
-            <span class="pulse-dot"></span>
-            <p>Scanning 15-minute institutional order flow & fair value gaps...</p>
-          </div>
-        </div>
-
-        <!-- Quick Actions & Developer Shortcuts -->
-        <div class="panel-sub-header">
-          <span>WORKSTATION SHORTCUTS</span>
-        </div>
-        <div class="quick-actions-grid">
-          <button class="action-btn vision-btn" data-cmd="मेरा स्क्रीन देखो और बताओ क्या दिख रहा है">👁️ Live Screen Vision</button>
-          <button class="action-btn news-btn" data-cmd="आज की ताज़ा और बड़ी खबरें बताओ">🔥 Breaking News</button>
-          <button class="action-btn search-btn" data-cmd="गूगल का वर्तमान सीईओ कौन है?">🌐 Web Search</button>
-          <button class="action-btn brief-btn" data-cmd="सुबह 9 बजे का प्री मार्केट ब्रीफिंग दो">☀️ Morning Brief</button>
-          <button class="action-btn weather-btn" data-cmd="आज का मौसम कैसा है?">⛅ Live Weather</button>
-          <button class="action-btn cricket-btn" data-cmd="लाइव क्रिकेट स्कोर बताओ">🏏 Cricket Score</button>
-          <button class="action-btn dev-btn" data-cmd="डेवलपर वर्कस्पेस और गिट स्टेटस बताओ">⚡ Dev Status</button>
-          <button class="action-btn" style="border-color: rgba(244, 63, 94, 0.4); color: #fda4af;" data-cmd="इस लिंक का साइबर सिक्योरिटी विश्लेषण करो: https://fsnls.buzz/XploXtucD/in-en?1031685336735833869&s=wa">🛡️ Scam Radar</button>
-          <button class="action-btn" style="border-color: rgba(168, 85, 247, 0.4); color: #d8b4fe;" data-cmd="Shah Rukh Khan ka complete research report banao">🔬 Deep Research</button>
-          <button class="action-btn" data-cmd="open vscode">VS Code</button>
-        </div>
-      </section>
-
-      <!-- CENTER COLUMN: WIDE TRADINGVIEW CHART + COMPACT ARC REACTOR & CHAT TERMINAL -->
-      <section class="panel glass-card center-main-panel">
-        <!-- Main Interactive Candlestick Chart -->
-        <div class="main-chart-container">
-          <div class="chart-control-bar">
-            <div class="chart-active-info">
-              <span class="chart-sym-name" id="chart-symbol-label">NIFTY 50</span>
-              <span class="chart-timeframe-badge">15M SMC</span>
-              <span class="live-dot-pulse" id="chart-market-status">● VERIFYING SESSION...</span>
-              <span class="chart-session-note" id="chart-session-note"></span>
-            </div>
-            <div class="chart-tf-buttons">
-              <button class="tf-btn" data-tf="5m">5m</button>
-              <button class="tf-btn active" data-tf="15m">15m</button>
-              <button class="tf-btn" data-tf="1h">1h</button>
-            </div>
-          </div>
-          <div id="tv-chart" class="tv-chart-view"></div>
-        </div>
-
-        <!-- Compact Voice & Terminal Hub -->
-        <div class="terminal-chat-wrapper">
-          <!-- Sleek Compact Arc Reactor Bar -->
-          <div class="sleek-arc-bar">
-            <div class="sleek-reactor-core" id="arc-reactor" title="Click to speak with Jarvis">
-              <div class="reactor-outer-ring"></div>
-              <span class="reactor-spark">✦</span>
-            </div>
-            <canvas id="waveform-canvas" width="280" height="34"></canvas>
-            <div class="sleek-voice-status" id="voice-status">VOICE RADAR: Listening for 'Hey Jarvis'</div>
+            <button class="refresh-radar-btn" id="refresh-radar-btn" title="Refresh Live Data">↻</button>
           </div>
 
-          <!-- Chat Feed -->
-          <div class="chat-feed" id="chat-feed">
-            <div class="chat-msg jarvis-msg">
-              <div class="msg-avatar">J</div>
-              <div class="msg-body">
-                <span class="msg-sender">JARVIS</span>
-                <p>जी सर, आपका मल्टी-मोडल वर्कस्टेशन तैयार है। ट्रेडिंग चार्ट्स, डेवलपर टूल्स, स्क्रीन विज़न और ऑटोनॉमस विजेट्स सक्रिय हैं। बताइए आज क्या आदेश है?</p>
-                <span class="msg-time" id="init-time">NOW</span>
+          <div class="watchlist-section" id="watchlist-chips">
+            <div class="ticker-chip active" data-symbol="NIFTY50">
+              <div class="chip-info">
+                <span class="chip-sym">NIFTY 50</span>
+                <span class="chip-tag">NSE INDEX</span>
+              </div>
+              <span class="chip-price" id="price-nifty50">Fetching...</span>
+            </div>
+            <div class="ticker-chip" data-symbol="BANKNIFTY">
+              <div class="chip-info">
+                <span class="chip-sym">BANKNIFTY</span>
+                <span class="chip-tag">NSE BANK</span>
+              </div>
+              <span class="chip-price" id="price-banknifty">Fetching...</span>
+            </div>
+            <div class="ticker-chip" data-symbol="BTCUSDT">
+              <div class="chip-info">
+                <span class="chip-sym">BTC / USDT</span>
+                <span class="chip-tag">BINANCE</span>
+              </div>
+              <span class="chip-price" id="price-btcusdt">Fetching...</span>
+            </div>
+          </div>
+
+          <div class="fno-card">
+            <div class="fno-header">
+              <span class="fno-title">OPTION CHAIN TELEMETRY</span>
+              <span class="fno-badge" id="opt-sentiment-badge">NEUTRAL</span>
+            </div>
+            <div class="fno-metrics">
+              <div class="fno-item">
+                <span class="fno-label">PCR</span>
+                <span class="fno-val" id="opt-pcr">1.02</span>
+              </div>
+              <div class="fno-item">
+                <span class="fno-label">MAX PAIN</span>
+                <span class="fno-val" id="opt-maxpain">24,350</span>
+              </div>
+              <div class="fno-item">
+                <span class="fno-label">INDIA VIX</span>
+                <span class="fno-val" id="opt-vix">--</span>
               </div>
             </div>
           </div>
 
-          <!-- Input Controls -->
-          <div class="input-controls">
-            <button class="mic-btn" id="mic-btn" title="Toggle Microphone">
-              <svg class="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                <line x1="12" y1="19" x2="12" y2="23"></line>
-                <line x1="8" y1="23" x2="16" y2="23"></line>
-              </svg>
-            </button>
-            <input type="text" id="user-text-input" placeholder="Ask Jarvis (Trading, Coding, Weather, Cricket, Web Search, Screen Vision)..." autocomplete="off">
-            <button class="send-btn" id="send-btn">
-              <span>SEND</span>
-            </button>
+          <div class="panel-sub-header">
+            <span>INSTITUTIONAL SMC ALERTS</span>
+          </div>
+          <div class="signals-list" id="signals-list">
+            <div class="empty-signals">
+              <span class="pulse-dot"></span>
+              <p>Scanning 15-minute institutional order flow & fair value gaps...</p>
+            </div>
+          </div>
+
+          <div class="panel-sub-header">
+            <span>WORKSTATION SHORTCUTS</span>
+          </div>
+          <div class="quick-actions-grid">
+            <button class="action-btn vision-btn" data-cmd="मेरा स्क्रीन देखो और बताओ क्या दिख रहा है">👁️ Live Screen Vision</button>
+            <button class="action-btn news-btn" data-cmd="आज की ताज़ा और बड़ी खबरें बताओ">🔥 Breaking News</button>
+            <button class="action-btn search-btn" data-cmd="गूगल का वर्तमान सीईओ कौन है?">🌐 Web Search</button>
+            <button class="action-btn brief-btn" data-cmd="सुबह 9 बजे का प्री मार्केट ब्रीफिंग दो">☀️ Morning Brief</button>
+            <button class="action-btn weather-btn" data-cmd="आज का मौसम कैसा है?">⛅ Live Weather</button>
+            <button class="action-btn cricket-btn" data-cmd="लाइव क्रिकेट स्कोर बताओ">🏏 Cricket Score</button>
+            <button class="action-btn dev-btn" data-cmd="डेवलपर वर्कस्पेस और गिट स्टेटस बताओ">⚡ Dev Status</button>
+            <button class="action-btn" style="border-color: rgba(244, 63, 94, 0.4); color: #fda4af;" data-cmd="इस लिंक का साइबर सिक्योरिटी विश्लेषण करो: https://fsnls.buzz/XploXtucD/in-en?1031685336735833869&s=wa">🛡️ Scam Radar</button>
+            <button class="action-btn" style="border-color: rgba(168, 85, 247, 0.4); color: #d8b4fe;" data-cmd="Shah Rukh Khan ka complete research report banao">🔬 Deep Research</button>
+            <button class="action-btn" data-cmd="open vscode">VS Code</button>
+          </div>
+        </section>
+
+        <!-- CENTER COLUMN: WIDE TRADINGVIEW CHART + COMPACT ARC REACTOR & CHAT -->
+        <section class="panel glass-card center-main-panel">
+          <div class="main-chart-container">
+            <div class="chart-control-bar">
+              <div class="chart-active-info">
+                <span class="chart-sym-name" id="chart-symbol-label">NIFTY 50</span>
+                <span class="chart-timeframe-badge">15M SMC</span>
+                <span class="live-dot-pulse" id="chart-market-status">● VERIFYING SESSION...</span>
+                <span class="chart-session-note" id="chart-session-note"></span>
+              </div>
+              <div class="chart-tf-buttons">
+                <button class="tf-btn" data-tf="5m">5m</button>
+                <button class="tf-btn active" data-tf="15m">15m</button>
+                <button class="tf-btn" data-tf="1h">1h</button>
+              </div>
+            </div>
+            <div id="tv-chart" class="tv-chart-view"></div>
+          </div>
+
+          <div class="terminal-chat-wrapper">
+            <div class="sleek-arc-bar">
+              <div class="sleek-reactor-core" id="arc-reactor" title="Click to speak with Jarvis">
+                <div class="reactor-outer-ring"></div>
+                <span class="reactor-spark">✦</span>
+              </div>
+              <canvas id="waveform-canvas" width="280" height="34"></canvas>
+              <div class="sleek-voice-status" id="voice-status">VOICE RADAR: Listening for 'Hey Jarvis'</div>
+            </div>
+
+            <div class="chat-feed" id="chat-feed">
+              <div class="chat-msg jarvis-msg">
+                <div class="msg-avatar">J</div>
+                <div class="msg-body">
+                  <span class="msg-sender">JARVIS</span>
+                  <p>जी सर, आपका मल्टी-मोडल वर्कस्टेशन तैयार है। ट्रेडिंग चार्ट्स, डेवलपर टूल्स, स्क्रीन विज़न और ऑटोनॉमस विजेट्स सक्रिय हैं। बताइए आज क्या आदेश है?</p>
+                  <span class="msg-time" id="init-time">NOW</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="input-controls">
+              <button class="mic-btn" id="mic-btn" title="Toggle Microphone">
+                <svg class="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                  <line x1="12" y1="19" x2="12" y2="23"></line>
+                  <line x1="8" y1="23" x2="16" y2="23"></line>
+                </svg>
+              </button>
+              <input type="text" id="user-text-input" placeholder="Ask Jarvis (Trading, Coding, Weather, Cricket, Web Search, Screen Vision)..." autocomplete="off">
+              <button class="send-btn" id="send-btn">
+                <span>SEND</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- RIGHT COLUMN: DYNAMIC AUTONOMOUS OMNI-CANVAS PANEL -->
+        <section class="panel glass-card dynamic-panel" id="dynamic-panel">
+          <div class="panel-header dynamic-header">
+            <div class="header-title">
+              <span class="panel-icon">✨</span>
+              <h2 id="dynamic-panel-title">AUTONOMOUS CANVAS</h2>
+            </div>
+            <div class="dynamic-controls">
+              <span class="auto-badge" id="auto-badge">AI DRIVEN</span>
+              <button class="clear-panel-btn" id="clear-dynamic-btn" title="Reset View">↺</button>
+            </div>
+          </div>
+
+          <div class="dynamic-content-body" id="dynamic-content-body">
+            <div class="dynamic-placeholder" id="dynamic-placeholder">
+              <div class="placeholder-icon">✦</div>
+              <h3>JARVIS OMNI CANVAS</h3>
+              <p>जब आप मौसम, क्रिकेट स्कोर, स्क्रीन विज़न या कोडिंग से जुड़ा सवाल पूछेंगे, तो जार्विस स्वतः यहाँ लाइव इंटरेक्टिव कार्ड प्रोजेक्ट करेगा।</p>
+              <div class="preset-triggers">
+                <button class="preset-pill" data-cmd="आज का मौसम कैसा है?">⛅ Live Weather</button>
+                <button class="preset-pill" data-cmd="क्रिकेट स्कोर क्या हुआ?">🏏 Cricket Match</button>
+                <button class="preset-pill" data-cmd="गूगल का वर्तमान सीईओ कौन है?">🌐 Web Search</button>
+                <button class="preset-pill" data-cmd="डेवलपर वर्कस्पेस स्टेटस बताओ">⚡ Dev Status</button>
+                <button class="preset-pill" data-cmd="स्क्रीन देखो और बताओ क्या दिख रहा है">👁️ Screen Vision</button>
+                <button class="preset-pill" data-cmd="इस लिंक का साइबर सिक्योरिटी विश्लेषण करो: https://fsnls.buzz/XploXtucD/in-en?1031685336735833869&s=wa">🛡️ URL Scam Check</button>
+                <button class="preset-pill" style="border-color: rgba(168, 85, 247, 0.4); color: #d8b4fe;" data-cmd="Quantum Computing ko deeply explain karo aur report banao">🔬 Deep Research Lab</button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- TAB 2: SYSTEM HEALTH CENTER -->
+    <!-- ================================================================= -->
+    <div class="tab-view" id="tab-health">
+      <div class="sub-view-container">
+        <div class="view-header">
+          <h2>🩺 System Health & Real Diagnostic Center</h2>
+          <button class="action-btn" id="refresh-health-btn">↻ Refresh Diagnostics</button>
+        </div>
+        <div class="health-grid" id="health-grid-content">
+          <div class="loading-state">Loading real diagnostics...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- TAB 3: AI PROVIDERS & CIRCUIT BREAKERS -->
+    <!-- ================================================================= -->
+    <div class="tab-view" id="tab-models">
+      <div class="sub-view-container">
+        <div class="view-header">
+          <h2>⚡ Multi-Provider AI Intelligence & Circuit Breakers</h2>
+          <button class="action-btn" id="refresh-models-btn">↻ Probe Providers</button>
+        </div>
+        <div class="models-grid" id="models-grid-content">
+          <div class="loading-state">Inspecting provider circuit breakers...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- TAB 4: TRADING STRATEGY LAB & QUANTITATIVE BACKTESTER -->
+    <!-- ================================================================= -->
+    <div class="tab-view" id="tab-strategy">
+      <div class="sub-view-container">
+        <div class="view-header">
+          <h2>📈 Quantitative Strategy Lab & Walk-Forward Backtester</h2>
+          <span class="badge warning-badge">Educational & Simulated Only — Not Financial Advice</span>
+        </div>
+        <div class="strategy-lab-layout">
+          <div class="strategy-controls-card glass-card">
+            <h3>Backtest Parameters</h3>
+            <div class="form-group">
+              <label>Strategy</label>
+              <select id="bt-strategy-select">
+                <option value="sma_ema_crossover">SMA / EMA Trend Following Crossover</option>
+                <option value="rsi_mean_reversion">RSI Mean Reversion (30/70 Divergence)</option>
+                <option value="macd_momentum">MACD Momentum Crossover</option>
+                <option value="bollinger_breakout">Bollinger Bands Volatility Breakout</option>
+                <option value="smc_fair_value_gap">Smart Money Concepts: Fair Value Gap (FVG)</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Symbol</label>
+                <select id="bt-symbol-select">
+                  <option value="NIFTY50">NIFTY 50</option>
+                  <option value="BANKNIFTY">BANKNIFTY</option>
+                  <option value="BTCUSDT">BTC/USDT</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Capital (₹)</label>
+                <input type="number" id="bt-capital" value="1000000" step="50000">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Slippage (%)</label>
+                <input type="number" id="bt-slippage" value="0.05" step="0.01">
+              </div>
+              <div class="form-group">
+                <label>Fee (%)</label>
+                <input type="number" id="bt-fee" value="0.03" step="0.01">
+              </div>
+            </div>
+            <button class="action-btn primary-btn" id="run-backtest-btn">▶ Run Quantitative Backtest</button>
+          </div>
+          <div class="strategy-results-card glass-card" id="strategy-results-view">
+            <p class="placeholder-text">Select parameters and click 'Run Quantitative Backtest' to view metrics, win-rate, profit factor, and equity curve.</p>
           </div>
         </div>
-      </section>
+      </div>
+    </div>
 
-      <!-- RIGHT COLUMN: DYNAMIC AUTONOMOUS OMNI-CANVAS PANEL -->
-      <section class="panel glass-card dynamic-panel" id="dynamic-panel">
-        <div class="panel-header dynamic-header">
-          <div class="header-title">
-            <span class="panel-icon">✨</span>
-            <h2 id="dynamic-panel-title">AUTONOMOUS CANVAS</h2>
-          </div>
-          <div class="dynamic-controls">
-            <span class="auto-badge" id="auto-badge">AI DRIVEN</span>
-            <button class="clear-panel-btn" id="clear-dynamic-btn" title="Reset View">↺</button>
+    <!-- ================================================================= -->
+    <!-- TAB 5: PAPER TRADING PORTFOLIO -->
+    <!-- ================================================================= -->
+    <div class="tab-view" id="tab-paper">
+      <div class="sub-view-container">
+        <div class="view-header">
+          <h2>💼 Simulated Paper-Trading Portfolio (₹10,00,000 Capital)</h2>
+          <div class="header-actions">
+            <span class="badge warning-badge">Simulated Demo Account</span>
+            <button class="action-btn danger-btn" id="reset-paper-btn">↺ Reset Portfolio</button>
           </div>
         </div>
-
-        <div class="dynamic-content-body" id="dynamic-content-body">
-          <!-- Default State: Ready for Autonomous Projections -->
-          <div class="dynamic-placeholder" id="dynamic-placeholder">
-            <div class="placeholder-icon">✦</div>
-            <h3>JARVIS OMNI CANVAS</h3>
-            <p>जब आप मौसम, क्रिकेट स्कोर, स्क्रीन विज़न या कोडिंग से जुड़ा सवाल पूछेंगे, तो जार्विस स्वतः यहाँ लाइव इंटरेक्टिव कार्ड प्रोजेक्ट करेगा।</p>
-            <div class="preset-triggers">
-              <button class="preset-pill" data-cmd="आज का मौसम कैसा है?">⛅ Live Weather</button>
-              <button class="preset-pill" data-cmd="क्रिकेट स्कोर क्या हुआ?">🏏 Cricket Match</button>
-              <button class="preset-pill" data-cmd="गूगल का वर्तमान सीईओ कौन है?">🌐 Web Search</button>
-              <button class="preset-pill" data-cmd="डेवलपर वर्कस्पेस स्टेटस बताओ">⚡ Dev Status</button>
-              <button class="preset-pill" data-cmd="स्क्रीन देखो और बताओ क्या दिख रहा है">👁️ Screen Vision</button>
-              <button class="preset-pill" data-cmd="इस लिंक का साइबर सिक्योरिटी विश्लेषण करो: https://fsnls.buzz/XploXtucD/in-en?1031685336735833869&s=wa">🛡️ URL Scam Check</button>
-              <button class="preset-pill" style="border-color: rgba(168, 85, 247, 0.4); color: #d8b4fe;" data-cmd="Quantum Computing ko deeply explain karo aur report banao">🔬 Deep Research Lab</button>
+        <div class="paper-layout">
+          <div class="paper-summary-card glass-card" id="paper-summary-content">
+            <div class="loading-state">Loading portfolio state...</div>
+          </div>
+          <div class="paper-order-form glass-card">
+            <h3>Place Simulated Paper Order</h3>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Symbol</label>
+                <select id="order-symbol">
+                  <option value="NIFTY50">NIFTY 50</option>
+                  <option value="BANKNIFTY">BANKNIFTY</option>
+                  <option value="BTCUSDT">BTC/USDT</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Quantity</label>
+                <input type="number" id="order-qty" value="1" min="1">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Order Type</label>
+                <select id="order-type">
+                  <option value="MARKET">MARKET</option>
+                  <option value="LIMIT">LIMIT</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Stop Loss (Optional)</label>
+                <input type="number" id="order-sl" placeholder="SL Price">
+              </div>
+            </div>
+            <div class="btn-group">
+              <button class="action-btn buy-btn" id="btn-paper-buy">BUY / LONG</button>
+              <button class="action-btn sell-btn" id="btn-paper-sell">SELL / SHORT</button>
             </div>
           </div>
         </div>
-      </section>
+        <div class="glass-card" style="margin-top: 15px;">
+          <h3>Open Positions & Trade History</h3>
+          <div id="paper-positions-content" class="table-container">
+            <p class="placeholder-text">No active positions.</p>
+          </div>
+        </div>
+      </div>
+    </div>
 
-    </main>
+    <!-- ================================================================= -->
+    <!-- TAB 6: TRADING PSYCHOLOGY JOURNAL -->
+    <!-- ================================================================= -->
+    <div class="tab-view" id="tab-psychology">
+      <div class="sub-view-container">
+        <div class="view-header">
+          <h2>🧠 Trading Psychology Journal & Discipline Sentinel</h2>
+        </div>
+        <div class="psychology-layout">
+          <div class="psychology-form-card glass-card">
+            <h3>Log Trade Mental State</h3>
+            <div class="form-group">
+              <label>Emotional State</label>
+              <select id="psy-emotion">
+                <option value="Disciplined">Disciplined (Rules Strictly Followed)</option>
+                <option value="Confident">Confident (Calm & Prepared)</option>
+                <option value="FOMO">FOMO (Afraid of Missing Move)</option>
+                <option value="Revenge Trade">Revenge Trade (Frustrated by Loss)</option>
+                <option value="Anxious">Anxious (Excessive Position Size)</option>
+                <option value="Greedy">Greedy (Chasing Extra Gains)</option>
+                <option value="Hesitant">Hesitant (Second-Guessing Plan)</option>
+              </select>
+            </div>
+            <div class="checklist-group">
+              <label>Pre-Trade Verification Checklist</label>
+              <label class="check-item"><input type="checkbox" id="check-1" checked> Strategy entry setup fully confirmed</label>
+              <label class="check-item"><input type="checkbox" id="check-2" checked> Stop loss predetermined in system</label>
+              <label class="check-item"><input type="checkbox" id="check-3" checked> Capital risk per trade &lt;= 2%</label>
+              <label class="check-item"><input type="checkbox" id="check-4" checked> Calm mind, zero revenge trading</label>
+            </div>
+            <div class="form-group">
+              <label>Reflection Notes</label>
+              <textarea id="psy-notes" rows="3" placeholder="What did you observe? Did market follow your thesis?"></textarea>
+            </div>
+            <button class="action-btn primary-btn" id="save-psychology-btn">Save Journal Entry</button>
+          </div>
+          <div class="psychology-stats-card glass-card" id="psychology-analytics-content">
+            <div class="loading-state">Calculating discipline metrics...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- TAB 7: DEEP RESEARCH WORKSPACE -->
+    <!-- ================================================================= -->
+    <div class="tab-view" id="tab-research">
+      <div class="sub-view-container">
+        <div class="view-header">
+          <h2>🔬 Deep Research Workspace & Academic Monograph Studio</h2>
+        </div>
+        <div class="research-input-card glass-card">
+          <div class="form-row">
+            <input type="text" id="research-topic-input" placeholder="Enter any subject: Biography, Company, Science, Scheme, History..." style="flex:1;">
+            <select id="research-mode-select" style="width: 140px;">
+              <option value="STANDARD">Standard</option>
+              <option value="DEEP">Deep Monograph</option>
+              <option value="QUICK">Executive Quick</option>
+            </select>
+            <button class="action-btn primary-btn" id="start-research-btn">Start Deep Research</button>
+          </div>
+        </div>
+        <div class="glass-card" style="margin-top: 15px;">
+          <h3>Persistent Research Jobs & Reports</h3>
+          <div id="research-jobs-list" class="table-container">
+            <div class="loading-state">Loading saved research monographs...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- TAB 8: PERSISTENT MEMORY BRAIN -->
+    <!-- ================================================================= -->
+    <div class="tab-view" id="tab-memory">
+      <div class="sub-view-container">
+        <div class="view-header">
+          <h2>💾 7-Category Persistent Memory Brain (SQLite FTS5)</h2>
+          <div class="header-actions">
+            <button class="action-btn" id="export-memory-btn">📥 Export JSON</button>
+            <button class="action-btn" id="add-memory-btn">+ Add Memory</button>
+          </div>
+        </div>
+        <div class="memory-search-bar">
+          <input type="text" id="memory-search-input" placeholder="Search across all persistent memories with FTS5...">
+          <select id="memory-category-filter">
+            <option value="">All Categories</option>
+            <option value="conversation_history">Conversation History</option>
+            <option value="user_preferences">User Preferences</option>
+            <option value="user_approved_memories">User-Approved Facts</option>
+            <option value="project_memory">Project Memory</option>
+            <option value="research_knowledge">Research Knowledge</option>
+            <option value="trading_journal">Trading Journal</option>
+            <option value="action_audit">Action Audit</option>
+          </select>
+        </div>
+        <div class="glass-card" style="margin-top: 15px;">
+          <div id="memory-items-list" class="table-container">
+            <div class="loading-state">Loading persistent knowledge...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- TAB 9: WORKFLOW AUTOMATION STUDIO -->
+    <!-- ================================================================= -->
+    <div class="tab-view" id="tab-workflows">
+      <div class="sub-view-container">
+        <div class="view-header">
+          <h2>⚡ Visual Workflow Automation Studio</h2>
+          <span class="badge">TRIGGER ➔ CONDITION ➔ ACTION ➔ RESULT</span>
+        </div>
+        <div class="glass-card">
+          <h3>Pre-Built Automation Templates</h3>
+          <div class="workflow-templates-grid" id="workflow-templates-grid">
+            <div class="loading-state">Loading automation pipelines...</div>
+          </div>
+        </div>
+        <div class="glass-card" style="margin-top: 15px;">
+          <h3>Workflow Execution History Trace</h3>
+          <div id="workflow-history-list" class="table-container">
+            <div class="loading-state">Loading execution traces...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- TAB 10: SECURITY & SETTINGS -->
+    <!-- ================================================================= -->
+    <div class="tab-view" id="tab-security">
+      <div class="sub-view-container">
+        <div class="view-header">
+          <h2>⚙️ Security, Privacy Controls & Audit Trails</h2>
+        </div>
+        <div class="security-layout">
+          <div class="glass-card">
+            <h3>Hardware & Privacy Kill Switches</h3>
+            <div class="security-controls-list">
+              <div class="security-item">
+                <div>
+                  <strong>Microphone Kill Switch</strong>
+                  <p>Instantly cuts all audio input processing and speech recognition.</p>
+                </div>
+                <button class="action-btn" id="sec-mic-toggle">Active</button>
+              </div>
+              <div class="security-item">
+                <div>
+                  <strong>Screen Vision Kill Switch</strong>
+                  <p>Blocks automated desktop capture and vision screenshot OCR.</p>
+                </div>
+                <button class="action-btn" id="sec-screen-toggle">Active</button>
+              </div>
+              <div class="security-item">
+                <div>
+                  <strong>Local Wake-Word Listener ('Hey Jarvis')</strong>
+                  <p>Toggles offline continuous listening daemon (Off by default).</p>
+                </div>
+                <button class="action-btn" id="sec-wake-toggle">Disabled</button>
+              </div>
+            </div>
+          </div>
+          <div class="glass-card">
+            <h3>Software Auto-Updater & Integrity</h3>
+            <div id="updater-status-content">
+              <p>Current Version: <strong>v2.1.0</strong> (Installed)</p>
+              <button class="action-btn primary-btn" id="check-update-btn" style="margin-top:10px;">Check for Updates</button>
+            </div>
+          </div>
+        </div>
+        <div class="glass-card" style="margin-top: 15px;">
+          <h3>Structured Immutable Audit Trail (data/audit_log.json)</h3>
+          <div id="audit-log-content" class="table-container">
+            <div class="loading-state">Loading audit events...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- TWO-STEP ACTION CONFIRMATION MODAL -->
+  <div class="modal-backdrop" id="confirmation-modal" style="display:none;">
+    <div class="modal-card glass-card">
+      <div class="modal-header">
+        <span class="modal-icon">⚠️</span>
+        <h3 id="confirm-title">सुरक्षा पुष्टि आवश्यक (Security Approval Required)</h3>
+      </div>
+      <div class="modal-body">
+        <p id="confirm-description">J.A.R.V.I.S. wants to perform a high-impact operation.</p>
+        <div class="confirm-details-box" id="confirm-details">
+          <!-- Action details -->
+        </div>
+        <p class="confirm-timer">Confirmation expires in: <span id="confirm-time-left">60</span>s</p>
+      </div>
+      <div class="modal-actions">
+        <button class="action-btn danger-btn" id="confirm-deny-btn">❌ Deny / Cancel</button>
+        <button class="action-btn buy-btn" id="confirm-approve-btn">✅ Approve Action</button>
+      </div>
+    </div>
   </div>
 
   <!-- Audio player -->

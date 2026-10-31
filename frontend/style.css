@@ -1967,3 +1967,296 @@ body.hud-mode #full-dashboard {
   background: rgba(168, 85, 247, 0.2);
   color: #fff;
 }
+
+/* ==========================================================================
+   UPGRADED WORKSTATION MODULAR SUB-NAV TABS & WORKSPACE PANELS
+   ========================================================================== */
+.sub-nav-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 1.25rem;
+  background: rgba(10, 14, 22, 0.95);
+  border-bottom: 1px solid var(--border-subtle);
+  overflow-x: auto;
+  white-space: nowrap;
+  z-index: 10;
+}
+.sub-nav-tabs::-webkit-scrollbar {
+  height: 3px;
+}
+.sub-nav-tabs::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+}
+
+.nav-tab-btn {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.75rem;
+  font-family: var(--font-main);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.nav-tab-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.05);
+}
+.nav-tab-btn.active {
+  color: var(--cyan-neon);
+  background: rgba(0, 242, 254, 0.08);
+  border-color: rgba(0, 242, 254, 0.3);
+  box-shadow: 0 0 10px rgba(0, 242, 254, 0.15);
+}
+
+.tab-view {
+  display: none;
+  flex: 1;
+  width: 100%;
+  height: calc(100vh - 105px);
+  overflow-y: auto;
+}
+.tab-view.active {
+  display: flex;
+  flex-direction: column;
+}
+
+.sub-view-container {
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.view-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 0.75rem;
+}
+.view-header h2 {
+  font-size: 1.15rem;
+  font-family: var(--font-display);
+  letter-spacing: 0.5px;
+}
+
+/* Privacy & Voice Controls in Header */
+.privacy-toggle-btn {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--emerald-profit);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  padding: 0.25rem 0.6rem;
+  border-radius: 14px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.privacy-toggle-btn.killed {
+  background: rgba(244, 63, 94, 0.15);
+  color: var(--rose-loss);
+  border-color: rgba(244, 63, 94, 0.4);
+}
+
+.voice-stop-btn {
+  background: rgba(244, 63, 94, 0.25);
+  color: #fff;
+  border: 1px solid var(--rose-loss);
+  padding: 0.25rem 0.6rem;
+  border-radius: 14px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  cursor: pointer;
+  animation: pulse-ring 1.2s infinite;
+}
+
+/* Two-Step Action Confirmation Modal */
+.modal-backdrop {
+  position: fixed;
+  top: 0; left: 0; width: 100vw; height: 100vh;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.modal-card {
+  width: 90%;
+  max-width: 500px;
+  background: rgba(18, 22, 33, 0.95);
+  border: 1px solid var(--amber-warning);
+  box-shadow: 0 0 30px rgba(245, 158, 11, 0.25);
+  padding: 1.5rem;
+  border-radius: 12px;
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.modal-header h3 {
+  font-size: 1.05rem;
+  color: var(--amber-warning);
+}
+.confirm-details-box {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 0.75rem;
+  margin: 0.75rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+.confirm-timer {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+/* Grids & Cards Layout */
+.health-grid, .models-grid, .workflow-templates-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.strategy-lab-layout, .paper-layout, .psychology-layout, .security-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+}
+
+@media (max-width: 900px) {
+  .strategy-lab-layout, .paper-layout, .psychology-layout, .security-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.table-container {
+  overflow-x: auto;
+  max-height: 400px;
+  overflow-y: auto;
+}
+.table-container table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+.table-container th {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.table-container td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+.form-group label {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+.form-group input, .form-group select, .form-group textarea, .research-input-card input, .memory-search-bar input {
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-primary);
+  padding: 0.5rem 0.75rem;
+  font-family: var(--font-main);
+  font-size: 0.82rem;
+}
+.form-row {
+  display: flex;
+  gap: 0.75rem;
+}
+.btn-group {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+.buy-btn {
+  background: rgba(16, 185, 129, 0.25) !important;
+  color: var(--emerald-profit) !important;
+  border-color: var(--emerald-profit) !important;
+}
+.sell-btn {
+  background: rgba(244, 63, 94, 0.25) !important;
+  color: var(--rose-loss) !important;
+  border-color: var(--rose-loss) !important;
+}
+.danger-btn {
+  background: rgba(244, 63, 94, 0.15) !important;
+  color: var(--rose-loss) !important;
+  border-color: rgba(244, 63, 94, 0.4) !important;
+}
+.primary-btn {
+  background: linear-gradient(135deg, rgba(0, 242, 254, 0.2), rgba(99, 102, 241, 0.3)) !important;
+  color: var(--cyan-neon) !important;
+  border-color: var(--cyan-neon) !important;
+}
+.checklist-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0.5rem 0;
+}
+.check-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+.memory-search-bar {
+  display: flex;
+  gap: 0.75rem;
+}
+.memory-search-bar input {
+  flex: 1;
+}
+.security-controls-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.security-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.6rem;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+}
+.security-item p {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+

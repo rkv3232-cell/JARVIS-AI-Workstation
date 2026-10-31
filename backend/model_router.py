@@ -39,11 +39,11 @@ TASK_MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
     },
     "coding": {
         "task_name": "Software Engineering, Python, Scripting & Code Debugging",
-        "primary_model": "gemini-3.8-flash (Auto-Probed on 3 Keys) -> Default: openai/gpt-oss-120b",
-        "provider": "Google Gemini (Auto-Check) / Groq LPU",
+        "primary_model": "Google Gemini (gemini-3.8-flash / gemini-3.5-flash-lite / gemini-3-flash)",
+        "provider": "Google Gemini Multi-Key Pool (Dedicated)",
         "is_free": True,
-        "description": "First probes which of the 3 Gemini API keys has 3.8 model active. If active, uses Gemini 3.8 Flash for coding; otherwise seamlessly falls back to 120B reasoning model.",
-        "fallbacks": ["openai/gpt-oss-120b", "qwen/qwen3.8-27b", "gemini-3.5-flash-lite"]
+        "description": "Dedicated Google Gemini coding engine running across all 3 API keys with auto-failover (Gemini 3.8 -> Gemini 3.5 Flash Lite -> Gemini 3 Flash).",
+        "fallbacks": ["openai/gpt-oss-120b (Emergency Backup)"]
     },
     "deep_reasoning": {
         "task_name": "Complex Mathematical Proofs, Logic & Multi-Step Reasoning",
@@ -102,6 +102,115 @@ TASK_MODEL_REGISTRY: Dict[str, Dict[str, Any]] = {
         "fallbacks": ["gtts"]
     }
 }
+
+# ---------------------------------------------------------------------------
+# Circuit Breaker & Provider Health Telemetry
+# ---------------------------------------------------------------------------
+class CircuitBreaker:
+    """
+    Prevents cascading failures and high latencies by temporarily opening
+    the circuit after repeated provider errors (429 rate limit or timeouts).
+    """
+    def __init__(self, name: str, failure_threshold: int = 3, cooldown_seconds: float = 60.0):
+        self.name = name
+        self.failure_threshold = failure_threshold
+        self.cooldown_seconds = cooldown_seconds
+        self.failure_count = 0
+        self.last_failure_time = 0.0
+        self.state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
+        self.total_requests = 0
+        self.successful_requests = 0
+        self.total_latency_ms = 0.0
+
+    def can_attempt(self) -> bool:
+        now = time.time()
+        if self.state == "CLOSED":
+            return True
+        elif self.state == "OPEN":
+            if now - self.last_failure_time >= self.cooldown_seconds:
+                self.state = "HALF_OPEN"
+                return True
+            return False
+        elif self.state == "HALF_OPEN":
+            return True
+        return True
+
+    def record_success(self, latency_ms: float):
+        self.failure_count = 0
+        self.state = "CLOSED"
+        self.total_requests += 1
+        self.successful_requests += 1
+        self.total_latency_ms += latency_ms
+
+    def record_failure(self, error: Any = None):
+        self.total_requests += 1
+        self.failure_count += 1
+        self.last_failure_time = time.time()
+        if self.failure_count >= self.failure_threshold:
+            self.state = "OPEN"
+            print(f"[CircuitBreaker] Provider '{self.name}' tripped OPEN for {self.cooldown_seconds}s due to repeated errors ({error}).")
+
+    def get_metrics(self) -> Dict[str, Any]:
+        avg_latency = round(self.total_latency_ms / self.successful_requests, 1) if self.successful_requests > 0 else 0
+        return {
+            "name": self.name,
+            "state": self.state,
+            "failure_count": self.failure_count,
+            "total_requests": self.total_requests,
+            "successful_requests": self.successful_requests,
+            "avg_latency_ms": avg_latency,
+            "last_failure_time": self.last_failure_time
+        }
+
+CIRCUITS = {
+    "gemini": CircuitBreaker("Google Gemini Pool", failure_threshold=3, cooldown_seconds=60.0),
+    "groq": CircuitBreaker("Groq LPU", failure_threshold=3, cooldown_seconds=60.0),
+    "openrouter": CircuitBreaker("OpenRouter", failure_threshold=3, cooldown_seconds=60.0),
+    "sarvam": CircuitBreaker("Sarvam AI", failure_threshold=3, cooldown_seconds=60.0),
+    "ollama": CircuitBreaker("Ollama Local", failure_threshold=2, cooldown_seconds=30.0)
+}
+
+def get_model_telemetry() -> Dict[str, Any]:
+    """Returns telemetry for all AI provider circuit breakers and model routing."""
+    return {
+        "circuits": {k: cb.get_metrics() for k, cb in CIRCUITS.items()},
+        "gemini_38_status": get_gemini_38_probe_status(),
+        "catalog": TASK_MODEL_REGISTRY
+    }
+
+async def route_ollama_fallback(
+    messages: List[Dict[str, str]],
+    system_prompt: str,
+    max_tokens: int = 250
+) -> Optional[str]:
+    """
+    Offline/Emergency Fallback: Queries local Ollama instance if available.
+    Ensures J.A.R.V.I.S. remains responsive even during complete internet or cloud outages.
+    """
+    cb = CIRCUITS["ollama"]
+    if not cb.can_attempt():
+        return None
+
+    t0 = time.perf_counter()
+    try:
+        url = f"{settings.OLLAMA_BASE_URL}/api/chat"
+        payload = {
+            "model": settings.OLLAMA_MODEL,
+            "messages": [{"role": "system", "content": system_prompt}, *messages],
+            "options": {"num_predict": max_tokens, "temperature": 0.3},
+            "stream": False
+        }
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            res = await client.post(url, json=payload)
+            if res.status_code == 200:
+                txt = res.json().get("message", {}).get("content", "").strip()
+                if txt:
+                    cb.record_success((time.perf_counter() - t0) * 1000)
+                    return f"*(Ollama Local Private LLM)* {txt}"
+            cb.record_failure(f"HTTP_{res.status_code}")
+    except Exception as e:
+        cb.record_failure(e)
+    return None
 
 def get_model_catalog() -> Dict[str, Dict[str, Any]]:
     """Returns the complete task-to-model specialization catalog."""
@@ -226,9 +335,13 @@ async def route_chat_voice(
     """
     Task 1: Ultra-Fast Conversational Voice Chat.
     Uses Groq qwen/qwen3.8-27b for ~300ms response with world-class Hindi voice tone.
+    Protected by CircuitBreakers with automated fallback down to local private Ollama.
     """
+    t0 = time.perf_counter()
+
     # 1. Primary: Groq Qwen 27B
-    if settings.GROQ_API_KEY:
+    cb_groq = CIRCUITS["groq"]
+    if settings.GROQ_API_KEY and cb_groq.can_attempt():
         try:
             async with httpx.AsyncClient(timeout=3.5) as client:
                 res = await client.post(
@@ -244,28 +357,38 @@ async def route_chat_voice(
                 if res.status_code == 200:
                     cnt = res.json()["choices"][0]["message"]["content"]
                     if cnt and cnt.strip():
+                        cb_groq.record_success((time.perf_counter() - t0) * 1000)
                         return cnt.strip()
+                else:
+                    cb_groq.record_failure(f"HTTP_{res.status_code}")
         except Exception as e:
+            cb_groq.record_failure(e)
             print(f"[ModelRouter] Chat Groq notice: {e}")
 
     # 2. Fallback: Google Gemini across Key Pool
-    for k in settings.gemini_keys_pool:
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.MODEL_VISION}:generateContent?key={k}"
-            history_text = "\n".join([f"{m.get('role', 'user')}: {m.get('content', '')}" for m in messages])
-            payload = {
-                "contents": [{"parts": [{"text": f"{system_prompt}\n\n{history_text}"}]}],
-                "generationConfig": {"temperature": 0.25, "maxOutputTokens": max_tokens}
-            }
-            async with httpx.AsyncClient(timeout=4.5) as client:
-                res = await client.post(url, json=payload)
-                if res.status_code == 200:
-                    return res.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-        except Exception as e:
-            pass
+    cb_gemini = CIRCUITS["gemini"]
+    if cb_gemini.can_attempt():
+        for k in settings.gemini_keys_pool:
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.MODEL_VISION}:generateContent?key={k}"
+                history_text = "\n".join([f"{m.get('role', 'user')}: {m.get('content', '')}" for m in messages])
+                payload = {
+                    "contents": [{"parts": [{"text": f"{system_prompt}\n\n{history_text}"}]}],
+                    "generationConfig": {"temperature": 0.25, "maxOutputTokens": max_tokens}
+                }
+                async with httpx.AsyncClient(timeout=4.5) as client:
+                    res = await client.post(url, json=payload)
+                    if res.status_code == 200:
+                        cb_gemini.record_success((time.perf_counter() - t0) * 1000)
+                        return res.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                    else:
+                        cb_gemini.record_failure(f"HTTP_{res.status_code}")
+            except Exception as e:
+                cb_gemini.record_failure(e)
 
     # 3. Fallback: Sarvam Indic LLM
-    if settings.SARVAM_API_KEY:
+    cb_sarvam = CIRCUITS["sarvam"]
+    if settings.SARVAM_API_KEY and cb_sarvam.can_attempt():
         try:
             async with httpx.AsyncClient(timeout=6.0) as client:
                 res = await client.post(
@@ -283,9 +406,18 @@ async def route_chat_voice(
                 if res.status_code == 200:
                     cnt = res.json()["choices"][0]["message"]["content"]
                     if cnt and cnt.strip():
+                        cb_sarvam.record_success((time.perf_counter() - t0) * 1000)
                         return cnt.strip()
+                else:
+                    cb_sarvam.record_failure(f"HTTP_{res.status_code}")
         except Exception as e:
+            cb_sarvam.record_failure(e)
             print(f"[ModelRouter] Chat Sarvam notice: {e}")
+
+    # 4. Final Offline Fallback: Local Private Ollama
+    local_reply = await route_ollama_fallback(messages, system_prompt, max_tokens)
+    if local_reply:
+        return local_reply
 
     return None
 

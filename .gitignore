@@ -21,6 +21,16 @@ ENV/
 *.sqlite3
 jarvis_memory.db
 chat.txt
+data/*.json
+data/*.db
+data/backups/
+data/staging/
+!data/.gitkeep
+
+# Build and Packaging Outputs
+dist/
+build/
+*.spec
 
 # Scratch & Temporary Test Artifacts
 scratch/
@@ -31,6 +41,7 @@ scratch_*
 # Generated Reports (Runtime output)
 frontend/reports/*.pdf
 frontend/reports/*.html
+frontend/reports/*.png
 *.pdf
 
 # OS & Editor

@@ -4,7 +4,14 @@ import shutil
 import ctypes
 import subprocess
 import webbrowser
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+
+from .security import (
+    action_registry,
+    log_audit_event,
+    RiskLevel,
+    PendingAction
+)
 from .windows_controller import (
     execute_radio_action,
     send_media_key,
@@ -32,6 +39,7 @@ def set_system_volume_percent(percent: int) -> bool:
         vol = cast(interface, POINTER(IAudioEndpointVolume))
         target_scalar = max(0.0, min(1.0, percent / 100.0))
         vol.SetMasterVolumeLevelScalar(target_scalar, None)
+        log_audit_event("set_volume", f"{percent}%", "safe", "success")
         return True
     except Exception as e:
         print(f"[Volume Error pycaw]: {e}")
@@ -51,109 +59,109 @@ def _send_volume_key(vk_code: int, times: int = 1) -> bool:
 # =========================================================================
 SETTINGS_MAP = {
     # Wi-Fi & Network
-    "wifi": ("start ms-settings:network-wifi", "वाई-फाई (Wi-Fi) सेटिंग्स"),
-    "network": ("start ms-settings:network", "नेटवर्क सेटिंग्स"),
-    "ethernet": ("start ms-settings:network-ethernet", "ईथरनेट सेटिंग्स"),
-    "hotspot": ("start ms-settings:network-mobilehotspot", "मोबाइल हॉटस्पॉट सेटिंग्स"),
-    "vpn": ("start ms-settings:network-vpn", "VPN सेटिंग्स"),
-    "proxy": ("start ms-settings:network-proxy", "प्रॉक्सी सेटिंग्स"),
+    "wifi": ("ms-settings:network-wifi", "वाई-फाई (Wi-Fi) सेटिंग्स"),
+    "network": ("ms-settings:network", "नेटवर्क सेटिंग्स"),
+    "ethernet": ("ms-settings:network-ethernet", "ईथरनेट सेटिंग्स"),
+    "hotspot": ("ms-settings:network-mobilehotspot", "मोबाइल हॉटस्पॉट सेटिंग्स"),
+    "vpn": ("ms-settings:network-vpn", "VPN सेटिंग्स"),
+    "proxy": ("ms-settings:network-proxy", "प्रॉक्सी सेटिंग्स"),
 
     # Bluetooth & Devices
-    "bluetooth": ("start ms-settings:bluetooth", "ब्लूटूथ और डिवाइसेस सेटिंग्स"),
-    "printers": ("start ms-settings:printers", "प्रिंटर सेटिंग्स"),
-    "mouse": ("start ms-settings:mousetouchpad", "माउस और टचपैड सेटिंग्स"),
+    "bluetooth": ("ms-settings:bluetooth", "ब्लूटूथ और डिवाइसेस सेटिंग्स"),
+    "printers": ("ms-settings:printers", "प्रिंटर सेटिंग्स"),
+    "mouse": ("ms-settings:mousetouchpad", "माउस और टचपैड सेटिंग्स"),
 
     # Display, Sound, Battery, Storage
-    "display": ("start ms-settings:display", "स्क्रीन और डिस्प्ले सेटिंग्स"),
-    "sound": ("start ms-settings:sound", "ऑडियो और साउंड सेटिंग्स"),
-    "volume": ("start ms-settings:sound", "ऑडियो सेटिंग्स"),
-    "battery": ("start ms-settings:batterysaver", "बैटरी और पावर सेटिंग्स"),
-    "power": ("start ms-settings:powersleep", "पावर और स्लीप सेटिंग्स"),
-    "sleep": ("start ms-settings:powersleep", "पावर और स्लीप सेटिंग्स"),
-    "storage": ("start ms-settings:storagesense", "स्टोरेज और डिस्क क्लीन सेटिंग्स"),
-    "notifications": ("start ms-settings:notifications", "नोटिफिकेशन सेटिंग्स"),
+    "display": ("ms-settings:display", "स्क्रीन और डिस्प्ले सेटिंग्स"),
+    "sound": ("ms-settings:sound", "ऑडियो और साउंड सेटिंग्स"),
+    "volume": ("ms-settings:sound", "ऑडियो सेटिंग्स"),
+    "battery": ("ms-settings:batterysaver", "बैटरी और पावर सेटिंग्स"),
+    "power": ("ms-settings:powersleep", "पावर और स्लीप सेटिंग्स"),
+    "sleep": ("ms-settings:powersleep", "पावर और स्लीप सेटिंग्स"),
+    "storage": ("ms-settings:storagesense", "स्टोरेज और डिस्क क्लीन सेटिंग्स"),
+    "notifications": ("ms-settings:notifications", "नोटिफिकेशन सेटिंग्स"),
 
     # Personalization & Themes
-    "personalization": ("start ms-settings:personalization", "पर्सनलाइजेशन सेटिंग्स"),
-    "themes": ("start ms-settings:themes", "थीम्स सेटिंग्स"),
-    "colors": ("start ms-settings:colors", "कलर और अपीयरेंस सेटिंग्स"),
-    "background": ("start ms-settings:personalization-background", "वॉलपेपर और बैकग्राउंड सेटिंग्स"),
-    "lock screen": ("start ms-settings:lockscreen", "लॉक स्क्रीन सेटिंग्स"),
+    "personalization": ("ms-settings:personalization", "पर्सनलाइजेशन सेटिंग्स"),
+    "themes": ("ms-settings:themes", "थीम्स सेटिंग्स"),
+    "colors": ("ms-settings:colors", "कलर और अपीयरेंस सेटिंग्स"),
+    "background": ("ms-settings:personalization-background", "वॉलपेपर और बैकग्राउंड सेटिंग्स"),
+    "lock screen": ("ms-settings:lockscreen", "लॉक स्क्रीन सेटिंग्स"),
 
     # Windows Update, Apps, Privacy, Time
-    "update": ("start ms-settings:windowsupdate", "विंडोज़ अपडेट (Windows Update)"),
-    "windows update": ("start ms-settings:windowsupdate", "विंडोज़ अपडेट"),
-    "apps": ("start ms-settings:appsfeatures", "इंस्टॉल्ड ऐप्स सेटिंग्स"),
-    "default apps": ("start ms-settings:defaultapps", "डिफ़ॉल्ट ऐप्स सेटिंग्स"),
-    "time": ("start ms-settings:dateandtime", "तारीख और समय सेटिंग्स"),
-    "date": ("start ms-settings:dateandtime", "तारीख और समय सेटिंग्स"),
-    "privacy": ("start ms-settings:privacy", "प्राइवेसी और सिक्योरिटी सेटिंग्स"),
+    "update": ("ms-settings:windowsupdate", "विंडोज़ अपडेट (Windows Update)"),
+    "windows update": ("ms-settings:windowsupdate", "विंडोज़ अपडेट"),
+    "apps": ("ms-settings:appsfeatures", "इंस्टॉल्ड ऐप्स सेटिंग्स"),
+    "default apps": ("ms-settings:defaultapps", "डिफ़ॉल्ट ऐप्स सेटिंग्स"),
+    "time": ("ms-settings:dateandtime", "तारीख और समय सेटिंग्स"),
+    "date": ("ms-settings:dateandtime", "तारीख और समय सेटिंग्स"),
+    "privacy": ("ms-settings:privacy", "प्राइवेसी और सिक्योरिटी सेटिंग्स"),
 
     # Generic Settings Root
-    "settings": ("start ms-settings:", "विंडोज़ सेटिंग्स (Windows Settings)"),
-    "pc settings": ("start ms-settings:", "पीसी सेटिंग्स"),
-    "system settings": ("start ms-settings:", "सिस्टम सेटिंग्स")
+    "settings": ("ms-settings:", "विंडोज़ सेटिंग्स (Windows Settings)"),
+    "pc settings": ("ms-settings:", "पीसी सेटिंग्स"),
+    "system settings": ("ms-settings:", "सिस्टम सेटिंग्स")
 }
 
 # =========================================================================
 # 2. SYSTEM UTILITIES & ADMINISTRATIVE TOOLS
 # =========================================================================
 SYSTEM_TOOLS_MAP = {
-    "task manager": ("taskmgr", "टास्क मैनेजर (Task Manager)"),
-    "taskmgr": ("taskmgr", "टास्क मैनेजर"),
-    "control panel": ("control", "कंट्रोल पैनल (Control Panel)"),
+    "task manager": ("taskmgr.exe", "टास्क मैनेजर (Task Manager)"),
+    "taskmgr": ("taskmgr.exe", "टास्क मैनेजर"),
+    "control panel": ("control.exe", "कंट्रोल पैनल (Control Panel)"),
     "device manager": ("devmgmt.msc", "डिवाइस मैनेजर (Device Manager)"),
     "disk management": ("diskmgmt.msc", "डिस्क मैनेजमेंट"),
     "services": ("services.msc", "विंडोज़ सर्विसेज (Services)"),
-    "registry editor": ("regedit", "रजिस्ट्री एडिटर (Registry Editor)"),
-    "regedit": ("regedit", "रजिस्ट्री एडिटर"),
-    "system info": ("msinfo32", "सिस्टम इन्फोर्मेशन"),
-    "msinfo": ("msinfo32", "सिस्टम इन्फोर्मेशन"),
-    "resource monitor": ("resmon", "रिसोर्स मॉनिटर"),
-    "performance monitor": ("perfmon", "परफॉर्मेंस मॉनिटर"),
-    "event viewer": ("eventvwr", "इवेंट व्यूअर")
+    "registry editor": ("regedit.exe", "रजिस्ट्री एडिटर (Registry Editor)"),
+    "regedit": ("regedit.exe", "रजिस्ट्री एडिटर"),
+    "system info": ("msinfo32.exe", "सिस्टम इन्फोर्मेशन"),
+    "msinfo": ("msinfo32.exe", "सिस्टम इन्फोर्मेशन"),
+    "resource monitor": ("resmon.exe", "रिसोर्स मॉनिटर"),
+    "performance monitor": ("perfmon.exe", "परफॉर्मेंस मॉनिटर"),
+    "event viewer": ("eventvwr.exe", "इवेंट व्यूअर")
 }
 
 # =========================================================================
 # 3. SPECIAL SHELL FOLDERS (Explorer shortcuts)
 # =========================================================================
 FOLDERS_MAP = {
-    "downloads": ("explorer.exe shell:Downloads", "डाउनलोड्स (Downloads) फोल्डर"),
-    "documents": ("explorer.exe shell:Personal", "डॉक्यूमेंट्स (Documents) फोल्डर"),
-    "pictures": ("explorer.exe shell:My Pictures", "पिक्चर्स (Pictures) फोल्डर"),
-    "videos": ("explorer.exe shell:My Video", "वीडियोज (Videos) फोल्डर"),
-    "music": ("explorer.exe shell:My Music", "म्यूजिक (Music) फोल्डर"),
-    "desktop folder": ("explorer.exe shell:Desktop", "डेस्कटॉप फोल्डर"),
-    "this pc": ("explorer.exe shell:MyComputerFolder", "दिस पीसी (This PC)"),
-    "my computer": ("explorer.exe shell:MyComputerFolder", "माई कंप्यूटर"),
-    "my pc": ("explorer.exe shell:MyComputerFolder", "माई पीसी"),
-    "recycle bin": ("explorer.exe shell:RecycleBinFolder", "रीसायकल बिन (Recycle Bin)")
+    "downloads": ("shell:Downloads", "डाउनलोड्स (Downloads) फोल्डर"),
+    "documents": ("shell:Personal", "डॉक्यूमेंट्स (Documents) फोल्डर"),
+    "pictures": ("shell:My Pictures", "पिक्चर्स (Pictures) फोल्डर"),
+    "videos": ("shell:My Video", "वीडियोज (Videos) फोल्डर"),
+    "music": ("shell:My Music", "म्यूजिक (Music) फोल्डर"),
+    "desktop folder": ("shell:Desktop", "डेस्कटॉप फोल्डर"),
+    "this pc": ("shell:MyComputerFolder", "दिस पीसी (This PC)"),
+    "my computer": ("shell:MyComputerFolder", "माई कंप्यूटर"),
+    "my pc": ("shell:MyComputerFolder", "माई पीसी"),
+    "recycle bin": ("shell:RecycleBinFolder", "रीसायकल बिन (Recycle Bin)")
 }
 
 # =========================================================================
 # 4. DESKTOP APPLICATIONS MAP
 # =========================================================================
 APP_MAP = {
-    "chrome": "start chrome",
-    "browser": "start chrome",
-    "google chrome": "start chrome",
-    "notepad": "notepad",
-    "calc": "calc",
-    "calculator": "calc",
-    "terminal": "start wt || start cmd",
-    "cmd": "start cmd",
-    "command prompt": "start cmd",
-    "powershell": "start powershell",
-    "spotify": "start spotify:",
-    "explorer": "explorer",
-    "files": "explorer",
-    "folder": "explorer",
-    "whatsapp": "start whatsapp:",
-    "discord": "start discord:",
-    "telegram": "start telegram:",
-    "vscode": "code",
-    "code": "code",
-    "editor": "code"
+    "chrome": "chrome.exe",
+    "browser": "chrome.exe",
+    "google chrome": "chrome.exe",
+    "notepad": "notepad.exe",
+    "calc": "calc.exe",
+    "calculator": "calc.exe",
+    "terminal": "wt.exe",
+    "cmd": "cmd.exe",
+    "command prompt": "cmd.exe",
+    "powershell": "powershell.exe",
+    "spotify": "spotify:",
+    "explorer": "explorer.exe",
+    "files": "explorer.exe",
+    "folder": "explorer.exe",
+    "whatsapp": "whatsapp:",
+    "discord": "discord:",
+    "telegram": "telegram:",
+    "vscode": "code.cmd",
+    "code": "code.cmd",
+    "editor": "code.cmd"
 }
 
 # =========================================================================
@@ -248,242 +256,243 @@ ACTION_VERBS = [
 FILLER_WORDS = [
     "karo", "kar", "do", "kariye", "please", "bhai", "jarvis", "ek", "baar",
     "ko", "par", "pe", "me", "mein", "app", "application", "website", "site",
-    "mera", "meri", "humara", "chahiye", "zara", "ki", "ka", "ke",
-    "करो", "कर", "दो", "जार्विस", "एप्लिकेशन", "वेबसाइट", "का", "की", "के", "में", "पर"
+    "mera", "meri", "zara", "jaldi", "system", "pc", "computer", "se",
+    "करो", "कर", "दो", "करिए", "प्लीज", "भाई", "जार्विस", "एक", "बार",
+    "को", "पर", "पे", "में", "ऐप", "एप्लीकेशन", "वेबसाइट", "साइट",
+    "मेरा", "मेरी", "ज़रा", "जल्दी", "सिस्टम", "पीसी", "कंप्यूटर", "से"
 ]
 
-def execute_os_action(command_str: str) -> dict:
+def _launch_native_target(target: str) -> bool:
     """
-    Interprets and executes all Windows PC settings, system utilities,
-    applications, websites, themes (dark/light), lock workstation, recycle bin,
-    precise volume, and precise screen brightness natively without internet search.
+    Safely launches URLs, URI schemes, or binaries using os.startfile or shell=False subprocess.
+    Avoids shell=True command injection risks.
     """
-    cmd = command_str.lower().strip()
+    try:
+        if target.startswith("http://") or target.startswith("https://"):
+            webbrowser.open(target)
+            return True
+        elif target.startswith("ms-settings:") or target.startswith("shell:") or target.endswith(":"):
+            os.startfile(target)
+            return True
+        else:
+            exe_path = shutil.which(target) or target
+            subprocess.Popen([exe_path], shell=False)
+            return True
+    except Exception as e:
+        # Fallback to os.startfile for registered Windows verbs/extensions
+        try:
+            os.startfile(target)
+            return True
+        except Exception as e2:
+            print(f"[Safe Launch Error] {target}: {e} / {e2}")
+            return False
+
+def execute_confirmed_action(action: PendingAction) -> Dict[str, Any]:
+    """
+    Executes a high-impact operation that has received explicit user confirmation.
+    Logs result to data/audit_log.json.
+    """
+    act_type = action.action_type
+    params = action.params
     
-    # 1. Phonetic replacement for Devanagari names
-    for h_k, e_v in HINDI_NAME_MAP.items():
-        cmd = cmd.replace(h_k, e_v)
+    try:
+        if act_type == "close_app":
+            app_name = params.get("app_name", "")
+            res = close_running_app(app_name)
+            log_audit_event("close_app", app_name, "high", "success" if res.get("success") else "failed", "user", res)
+            return res
+            
+        elif act_type == "empty_recycle_bin":
+            res = empty_recycle_bin()
+            log_audit_event("empty_recycle_bin", "RecycleBin", "high", "success" if res.get("success") else "failed", "user", res)
+            return res
+            
+        elif act_type == "delete_file":
+            file_path = params.get("path", "")
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                res = {"success": True, "message": f"फाइल '{file_path}' हटा दी गई है।"}
+                log_audit_event("delete_file", file_path, "high", "success", "user")
+                return res
+            else:
+                res = {"success": False, "message": f"फाइल '{file_path}' नहीं मिली।"}
+                log_audit_event("delete_file", file_path, "high", "failed", "user", {"reason": "not_found"})
+                return res
+                
+        elif act_type == "change_theme":
+            dark_mode = params.get("dark_mode", True)
+            res = set_windows_theme(dark_mode)
+            log_audit_event("change_theme", "dark" if dark_mode else "light", "medium", "success", "user")
+            return res
+            
+        return {"success": False, "message": f"अज्ञात कन्फर्मेशन एक्शन प्रकार: {act_type}"}
+    except Exception as e:
+        log_audit_event(act_type, action.target, "high", "error", "user", error=str(e))
+        return {"success": False, "message": f"कार्रवाई निष्पादन में त्रुटि: {str(e)}"}
+
+def execute_os_command(user_query: str) -> Dict[str, Any]:
+    """
+    Directly executes desktop launch actions with strict safety guards,
+    replacing shell=True with os.startfile and registered allowlists.
+    High-risk destructive actions trigger a two-step confirmation token.
+    """
+    raw_cmd = user_query.strip()
+    cmd = raw_cmd.lower()
+
+    # Pre-process: Replace Hindi keywords with canonical English keys
+    for hi, en in HINDI_NAME_MAP.items():
+        if hi in cmd:
+            cmd = cmd.replace(hi, en)
 
     # =========================================================================
-    # A0. WI-FI HARDWARE TOGGLE (ON / OFF / STATUS)
+    # A. HARDWARE RADIOS (Wi-Fi & Bluetooth ON / OFF)
     # =========================================================================
-    if any(w in cmd for w in ["wifi", "wi-fi", "वाईफाई", "वाई-फाई"]):
-        if any(w in cmd for w in [" on", " chalu", " चालू", " ऑन", "enable", "start", "shuru"]):
-            res = execute_radio_action("WiFi", action="Set", target_state="On")
-            return {"status": "success" if res["success"] else "error", "message": res["message"]}
-        elif any(w in cmd for w in [" off", " band", " बंद", " ऑफ", "disable", "stop"]):
-            res = execute_radio_action("WiFi", action="Set", target_state="Off")
-            return {"status": "success" if res["success"] else "error", "message": res["message"]}
-        elif any(w in cmd for w in ["status", "state", "kaisa", "hai ya", "चालू है या", "स्थिति"]):
-            res = execute_radio_action("WiFi", action="Get")
-            return {"status": "success" if res["success"] else "error", "message": res["message"]}
+    wifi_patterns = ["wifi", "wi-fi", "वाईफाई", "वाई-फाई", "internet"]
+    bt_patterns = ["bluetooth", "ब्लूटूथ"]
+
+    has_wifi = any(p in cmd for p in wifi_patterns)
+    has_bt = any(p in cmd for p in bt_patterns)
+
+    turn_on = any(v in cmd for v in ["on", "start", "enable", "chalu", "chalao", "kholo", "ऑन", "चालू", "खोलो"])
+    turn_off = any(v in cmd for v in ["off", "stop", "disable", "band", "roko", "ऑफ", "बंद", "रोको"])
+    query_status = any(v in cmd for v in ["status", "check", "batao", "kya hai", "dekho", "स्थिति", "बताओ"])
+
+    if has_wifi or has_bt:
+        target_kind = "WiFi" if has_wifi else "Bluetooth"
+        if turn_off:
+            res = execute_radio_action(target_kind, action="Set", target_state="Off")
+            log_audit_event("toggle_radio", f"{target_kind}_Off", "medium", "success")
+            return {"status": "success", "message": res["message"]}
+        elif turn_on:
+            res = execute_radio_action(target_kind, action="Set", target_state="On")
+            log_audit_event("toggle_radio", f"{target_kind}_On", "medium", "success")
+            return {"status": "success", "message": res["message"]}
+        elif query_status:
+            res = execute_radio_action(target_kind, action="Get")
+            return {"status": "success", "message": res["message"]}
 
     # =========================================================================
-    # A1. BLUETOOTH HARDWARE TOGGLE (ON / OFF / STATUS)
+    # B. MULTIMEDIA PLAYBACK CONTROL
     # =========================================================================
-    if any(w in cmd for w in ["bluetooth", "ब्लूटूथ"]):
-        if any(w in cmd for w in [" on", " chalu", " चालू", " ऑन", "enable", "start", "shuru"]):
-            res = execute_radio_action("Bluetooth", action="Set", target_state="On")
-            return {"status": "success" if res["success"] else "error", "message": res["message"]}
-        elif any(w in cmd for w in [" off", " band", " बंद", " ऑफ", "disable", "stop"]):
-            res = execute_radio_action("Bluetooth", action="Set", target_state="Off")
-            return {"status": "success" if res["success"] else "error", "message": res["message"]}
-        elif any(w in cmd for w in ["status", "state", "kaisa", "hai ya", "चालू है या", "स्थिति"]):
-            res = execute_radio_action("Bluetooth", action="Get")
-            return {"status": "success" if res["success"] else "error", "message": res["message"]}
+    media_words = ["play", "pause", "resume", "stop", "next", "previous", "track", "song", "gana", "video",
+                   "अगला", "पिछला", "रोको", "चलाओ", "गाना", "गीत", "बजाओ"]
+    if any(mw in cmd for mw in media_words) and any(v in cmd for v in ["gana", "song", "video", "media", "track", "next", "prev", "play", "pause"]):
+        res = send_media_key(cmd)
+        if res.get("success"):
+            return {"status": "success", "message": res["message"]}
 
     # =========================================================================
-    # A2. MEDIA CONTROLS (Play, Pause, Next Track, Previous Track)
+    # C. APPLICATION TERMINATION (HIGH RISK -> REQUIRES CONFIRMATION)
     # =========================================================================
-    media_kw = ["song", "gaana", "music", "video", "track", "गाना", "म्यूजिक", "वीडियो", "प्लेबैक"]
-    if any(w in cmd for w in ["next", "agla", "अगला"]) and any(w in cmd for w in media_kw):
-        res = send_media_key("next")
-        return {"status": "success" if res["success"] else "error", "message": res["message"]}
-    elif any(w in cmd for w in ["prev", "previous", "pichla", "पिछला"]) and any(w in cmd for w in media_kw):
-        res = send_media_key("prev")
-        return {"status": "success" if res["success"] else "error", "message": res["message"]}
-    elif any(w in cmd for w in ["play", "pause", "resume", "roko", "chalao"]) and any(w in cmd for w in media_kw):
-        res = send_media_key("play")
-        return {"status": "success" if res["success"] else "error", "message": res["message"]}
+    close_words = ["close", "kill", "exit", "band karo", "hatao", "khatam karo", "बंद करो", "हटाओ", "काटो"]
+    if any(cw in cmd for cw in close_words):
+        for app_key in APP_MAP.keys():
+            if app_key in cmd:
+                # Register high-risk action for explicit two-step approval
+                pending = action_registry.register(
+                    action_type="close_app",
+                    target=app_key,
+                    description=f"Terminate process '{app_key.title()}' ({APP_MAP[app_key]})",
+                    risk_level=RiskLevel.HIGH,
+                    params={"app_name": app_key},
+                    ttl_seconds=60
+                )
+                log_audit_event("request_close_app", app_key, "high", "pending_confirmation", "system")
+                return {
+                    "status": "pending_confirmation",
+                    "requires_approval": True,
+                    "action_id": pending.action_id,
+                    "pending_action": pending.to_dict(),
+                    "message": f"सुरक्षा पुष्टि आवश्यक: क्या आप सचमुच {app_key.title()} को बंद करना चाहते हैं? (Pending Confirmation ID: {pending.action_id})"
+                }
 
     # =========================================================================
-    # A3. APPLICATION TERMINATION (Close / Kill running applications)
+    # D. RECYCLE BIN PURGE (HIGH RISK -> REQUIRES CONFIRMATION)
     # =========================================================================
-    if any(w in cmd for w in ["close", "band karo", "band kar do", "हटाओ", "बंद करो", "काटो"]):
-        for app_c in ["chrome", "google chrome", "notepad", "calc", "calculator", "vscode", "code", "vs code", "spotify", "terminal", "cmd", "powershell", "task manager"]:
-            if app_c in cmd:
-                res = close_running_app(app_c)
-                return {"status": "success" if res["success"] else "error", "message": res["message"]}
+    bin_words = ["empty recycle bin", "clean recycle bin", "recycle bin khali", "recycle bin saaf", "कचरा पेटी खाली", "रीसायकल बिन खाली"]
+    if any(bw in cmd for bw in bin_words):
+        pending = action_registry.register(
+            action_type="empty_recycle_bin",
+            target="RecycleBin",
+            description="Permanently delete all files from Windows Recycle Bin",
+            risk_level=RiskLevel.HIGH,
+            params={},
+            ttl_seconds=60
+        )
+        log_audit_event("request_empty_recycle_bin", "RecycleBin", "high", "pending_confirmation", "system")
+        return {
+            "status": "pending_confirmation",
+            "requires_approval": True,
+            "action_id": pending.action_id,
+            "pending_action": pending.to_dict(),
+            "message": "सुरक्षा पुष्टि आवश्यक: क्या आप सचमुच रीसायकल बिन को पूरी तरह खाली करना चाहते हैं? (Pending Confirmation ID: " + pending.action_id + ")"
+        }
 
     # =========================================================================
-    # A. WINDOWS THEME CONTROL (Dark Mode / Light Mode)
+    # E. SYSTEM THEME TOGGLE (Dark Mode / Light Mode)
     # =========================================================================
-    if any(k in cmd for k in ["dark mode", "dark theme", "डार्क मोड", "डार्क थीम"]):
-        try:
-            ps_cmd = 'Set-ItemProperty -Path HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize -Name AppsUseLightTheme -Value 0; Set-ItemProperty -Path HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize -Name SystemUsesLightTheme -Value 0'
-            subprocess.run(["powershell", "-Command", ps_cmd], capture_output=True, shell=True)
-            return {"status": "success", "message": "जी सर, विंडोज़ में डार्क मोड (Dark Mode) सक्रिय कर दिया गया है।"}
-        except Exception as e:
-            return {"status": "error", "message": f"डार्क मोड लगाने में त्रुटि: {e}"}
-
-    if any(k in cmd for k in ["light mode", "light theme", "लाइट मोड", "लाइट थीम", "white mode"]):
-        try:
-            ps_cmd = 'Set-ItemProperty -Path HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize -Name AppsUseLightTheme -Value 1; Set-ItemProperty -Path HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize -Name SystemUsesLightTheme -Value 1'
-            subprocess.run(["powershell", "-Command", ps_cmd], capture_output=True, shell=True)
-            return {"status": "success", "message": "जी सर, विंडोज़ में लाइट मोड (Light Mode) सक्रिय कर दिया गया है।"}
-        except Exception as e:
-            return {"status": "error", "message": f"लाइट मोड लगाने में त्रुटि: {e}"}
+    if "dark mode" in cmd or "डार्क मोड" in cmd:
+        res = set_windows_theme(True)
+        return {"status": "success", "message": res["message"]}
+    elif "light mode" in cmd or "लाइट मोड" in cmd:
+        res = set_windows_theme(False)
+        return {"status": "success", "message": res["message"]}
 
     # =========================================================================
-    # B. LOCK WORKSTATION / SCREEN LOCK
+    # F. WORKSTATION LOCK
     # =========================================================================
-    if any(k in cmd for k in ["lock pc", "lock screen", "screen lock", "pc lock", "सिस्टम लॉक", "स्क्रीन लॉक"]):
-        try:
-            ctypes.windll.user32.LockWorkStation()
-            return {"status": "success", "message": "जी सर, आपके निर्देशानुसार पीसी को लॉक कर दिया गया है।"}
-        except Exception as e:
-            return {"status": "error", "message": f"पीसी लॉक करने में त्रुटि: {e}"}
+    lock_words = ["lock pc", "lock computer", "lock screen", "pc lock", "स्क्रीन लॉक", "पीसी लॉक"]
+    if any(lw in cmd for lw in lock_words):
+        res = lock_workstation()
+        log_audit_event("lock_pc", "workstation", "safe", "success")
+        return {"status": "success", "message": res["message"]}
 
     # =========================================================================
-    # C. SCREENSHOT / SNIPPING TOOL
+    # G. VOLUME & AUDIO CONTROL
     # =========================================================================
-    if any(k in cmd for k in ["screenshot", "screen shot", "snipping tool", "snip", "स्क्रीनशॉट"]):
-        try:
-            subprocess.Popen("explorer.exe ms-screenclip:", shell=True)
-            return {"status": "success", "message": "जी सर, स्क्रीनशॉट (Snipping Tool) सक्रिय कर दिया गया है।"}
-        except Exception:
-            try:
-                subprocess.Popen("snippingtool", shell=True)
-                return {"status": "success", "message": "जी सर, स्निपिंग टूल खोल दिया गया है।"}
-            except Exception as e:
-                return {"status": "error", "message": f"स्क्रीनशॉट टूल खोलने में त्रुटि: {e}"}
+    vol_match = re.search(r'(?:volume|sound|awaaz|aawaz|आवाज|साउंड)\s*(?:set\s*to\s*|karo\s*|ko\s*)?(\d{1,3})%?', cmd)
+    if vol_match:
+        val = int(vol_match.group(1))
+        if 0 <= val <= 100:
+            if set_system_volume_percent(val):
+                return {"status": "success", "message": f"जी सर, सिस्टम वॉल्यूम {val}% पर सेट कर दिया गया है।"}
+
+    if any(w in cmd for w in ["mute", "silent", "awaaz band", "आवाज बंद"]):
+        _send_volume_key(VK_VOLUME_MUTE)
+        log_audit_event("mute_volume", "master", "safe", "success")
+        return {"status": "success", "message": "जी सर, वॉल्यूम म्यूट कर दिया गया है।"}
+
+    if any(w in cmd for w in ["unmute", "awaaz kholo"]):
+        _send_volume_key(VK_VOLUME_MUTE)
+        log_audit_event("unmute_volume", "master", "safe", "success")
+        return {"status": "success", "message": "जी सर, वॉल्यूम अनम्यूट कर दिया गया है।"}
+
+    if any(w in cmd for w in ["volume up", "awaaz badhao", "आवाज बढ़ाओ"]):
+        _send_volume_key(VK_VOLUME_UP, 4)
+        return {"status": "success", "message": "जी सर, वॉल्यूम बढ़ा दिया गया है।"}
+
+    if any(w in cmd for w in ["volume down", "awaaz kam karo", "आवाज कम करो"]):
+        _send_volume_key(VK_VOLUME_DOWN, 4)
+        return {"status": "success", "message": "जी सर, वॉल्यूम कम कर दिया गया है।"}
 
     # =========================================================================
-    # D. RECYCLE BIN (Empty or Open)
+    # H. CHECK FOR WINDOWS SETTINGS (ms-settings:) -> Clean os.startfile()
     # =========================================================================
-    if any(k in cmd for k in ["empty recycle bin", "recycle bin khali", "recycle bin clean", "kachra saaf", "कचरा खाली", "रीसायकल बिन खाली"]):
-        try:
-            subprocess.run(["powershell", "-Command", "Clear-RecycleBin -Force -ErrorAction SilentlyContinue"], capture_output=True, shell=True)
-            return {"status": "success", "message": "जी सर, रीसायकल बिन को पूरी तरह खाली और साफ़ कर दिया गया है।"}
-        except Exception as e:
-            return {"status": "error", "message": f"रीसायकल बिन खाली करने में त्रुटि: {e}"}
-
-    # =========================================================================
-    # E. PRECISE BRIGHTNESS CONTROL (Specific Percent & Up/Down)
-    # =========================================================================
-    has_bright_word = any(w in cmd for w in ["brightness", "roshni", "ब्राइटनेस", "रोशनी"])
-    if has_bright_word:
-        m_b = re.search(r'(\d{1,3})\s*%', cmd) or re.search(r'(?:brightness|roshni|ब्राइटनेस|रोशनी)\s*(?:ko|to|pe|par|karo|set)?\s*(\d{1,3})', cmd)
-        if m_b:
-            target_bright = int(m_b.group(1))
-            if 0 <= target_bright <= 100:
-                try:
-                    import screen_brightness_control as sbc
-                    sbc.set_brightness(target_bright)
-                    return {"status": "success", "message": f"जी सर, स्क्रीन ब्राइटनेस {target_bright}% पर सेट कर दी गई है।"}
-                except Exception as e:
-                    return {"status": "error", "message": f"ब्राइटनेस {target_bright}% करने में त्रुटि: {e}"}
-
-        bright_up_keys = ["up", "increase", "badhao", "बढ़ाओ", "high"]
-        if any(k in cmd for k in bright_up_keys):
-            try:
-                import screen_brightness_control as sbc
-                curr = sbc.get_brightness()[0]
-                target_b = min(100, curr + 15)
-                sbc.set_brightness(target_b)
-                return {"status": "success", "message": f"जी सर, ब्राइटनेस {target_b}% कर दी गई है।"}
-            except Exception as e:
-                return {"status": "error", "message": f"ब्राइटनेस बढ़ाने में त्रुटि: {e}"}
-
-        bright_down_keys = ["down", "decrease", "lower", "kam karo", "kam", "कम करो", "कम"]
-        if any(k in cmd for k in bright_down_keys):
-            try:
-                import screen_brightness_control as sbc
-                curr = sbc.get_brightness()[0]
-                target_b = max(10, curr - 15)
-                sbc.set_brightness(target_b)
-                return {"status": "success", "message": f"जी सर, ब्राइटनेस {target_b}% कर दी गई है।"}
-            except Exception as e:
-                return {"status": "error", "message": f"ब्राइटनेस घटाने में त्रुटि: {e}"}
-
-    # =========================================================================
-    # F. ABSOLUTE VOLUME PERCENTAGE CONTROL
-    # =========================================================================
-    has_vol_word = any(w in cmd for w in ["volume", "velome", "volum", "volme", "valume", "sound", "awaz", "आवाज", "वॉल्यूम"])
-    if has_vol_word:
-        m_v = re.search(r'(\d{1,3})\s*%', cmd) or re.search(r'(?:volume|velome|volum|volme|valume|sound|awaz|आवाज|वॉल्यूम)\s*(?:ko|to|pe|par|karo|set)?\s*(\d{1,3})', cmd)
-        if m_v:
-            target_pct = int(m_v.group(1))
-            if 0 <= target_pct <= 100:
-                if set_system_volume_percent(target_pct):
-                    return {"status": "success", "message": f"जी सर, सिस्टम वॉल्यूम {target_pct}% पर सेट कर दिया गया है।"}
-                return {"status": "error", "message": f"वॉल्यूम {target_pct}% पर सेट करने में त्रुटि आई।"}
-
-        # Relative Volume Controls (Up / Down / Mute)
-        vol_up_keys = ["up", "increase", "badhao", "बढ़ाओ", "high"]
-        if any(k in cmd for k in vol_up_keys):
-            if _send_volume_key(VK_VOLUME_UP, 5):
-                return {"status": "success", "message": "जी सर, वॉल्यूम बढ़ा दिया गया है।"}
-            return {"status": "error", "message": "वॉल्यूम बढ़ाने में त्रुटि आई।"}
-
-        vol_down_keys = ["down", "decrease", "lower", "kam karo", "kam", "कम करो", "कम"]
-        if any(k in cmd for k in vol_down_keys):
-            if _send_volume_key(VK_VOLUME_DOWN, 5):
-                return {"status": "success", "message": "जी सर, वॉल्यूम कम कर दिया गया है।"}
-            return {"status": "error", "message": "वॉल्यूम कम करने में त्रुटि आई।"}
-
-        mute_keys = ["mute", "unmute", "band karo", "बंद करो", "म्यूट"]
-        if any(k in cmd for k in mute_keys):
-            if _send_volume_key(VK_VOLUME_MUTE, 1):
-                return {"status": "success", "message": "जी सर, ऑडियो म्यूट / अनम्यूट टॉगल कर दी गई है।"}
-            return {"status": "error", "message": "म्यूट करने में त्रुटि आई।"}
-
-    # =========================================================================
-    # F.2 OPEN LATEST CYBER / WEB INTELLIGENCE PDF REPORT
-    # =========================================================================
-    report_open_keys = ["open report", "open pdf", "रिपोर्ट खोलो", "पीडीएफ खोलो", "show report", "pdf खोलो", "latest report"]
-    if any(k in cmd for k in report_open_keys):
-        from pathlib import Path
-        rep_dir = Path(__file__).resolve().parent.parent / "frontend" / "reports"
-        if rep_dir.exists():
-            pdfs = sorted(rep_dir.glob("*.pdf"), key=os.path.getmtime, reverse=True)
-            if pdfs:
-                latest_pdf = str(pdfs[0])
-                try:
-                    os.startfile(latest_pdf)
-                    return {"status": "success", "message": f"जी सर, नवीनतम इंटेलिजेंस रिपोर्ट '{pdfs[0].name}' आपके कंप्यूटर पर खोल दी गई है।"}
-                except Exception as e:
-                    return {"status": "error", "message": f"रिपोर्ट खोलने में त्रुटि: {e}"}
-        return {"status": "error", "message": "सर, अभी तक कोई पीडीएफ रिपोर्ट जनरेट नहीं हुई है।"}
-
-    # =========================================================================
-    # G. DIRECT FULL URLS (http / https)
-    # =========================================================================
-    url_match = re.search(r'(https?://[^\s]+)', cmd)
-    if url_match:
-        inspect_words = ["check", "analyze", "report", "detail", "fraud", "scam", "fake", "kya", "kaisa", "सुरक्षित", "चेक", "रिपोर्ट", "विवरण"]
-        open_verbs = ["open", "kholo", "chalao", "browse", "visit", "खोलो", "चलाओ"]
-        if not any(w in cmd for w in inspect_words) and (any(v in cmd for v in open_verbs) or cmd.strip() == url_match.group(1)):
-            target_url = url_match.group(1)
-            webbrowser.open(target_url)
-            return {"status": "success", "message": f"जी सर, {target_url} ब्राउज़र में खोल दिया गया है।"}
-
-    # =========================================================================
-    # H. CHECK FOR WINDOWS SETTINGS (ms-settings:)
-    # =========================================================================
-    for s_key, (s_cmd, s_name) in SETTINGS_MAP.items():
+    for s_key, (s_uri, s_name) in SETTINGS_MAP.items():
         if f"{s_key} setting" in cmd or f"{s_key} सेटिंग्स" in cmd or (f"settings" in cmd and s_key in cmd) or (s_key in cmd and any(v in cmd for v in ACTION_VERBS)):
             try:
-                subprocess.Popen(s_cmd, shell=True)
+                os.startfile(s_uri)
+                log_audit_event("open_settings", s_uri, "safe", "success")
                 return {"status": "success", "message": f"जी सर, {s_name} खोल दी गई है।"}
             except Exception as e:
                 return {"status": "error", "message": f"{s_name} खोलने में त्रुटि: {e}"}
 
-    # If user just asked to open settings generally ("settings kholo", "open settings", "सेटिंग्स")
+    # If user just asked to open settings generally
     if "settings" in cmd or "setting" in cmd or "सेटिंग" in cmd:
         if any(v in cmd for v in ACTION_VERBS) or len(cmd.split()) <= 2:
             try:
-                subprocess.Popen("start ms-settings:", shell=True)
+                os.startfile("ms-settings:")
+                log_audit_event("open_settings", "ms-settings:", "safe", "success")
                 return {"status": "success", "message": "जी सर, विंडोज़ सेटिंग्स खोल दी गई है।"}
             except Exception as e:
                 return {"status": "error", "message": f"सेटिंग्स खोलने में त्रुटि: {e}"}
@@ -491,10 +500,11 @@ def execute_os_action(command_str: str) -> dict:
     # =========================================================================
     # I. CHECK SYSTEM UTILITIES & ADMINISTRATIVE TOOLS
     # =========================================================================
-    for tool_key, (tool_cmd, tool_name) in SYSTEM_TOOLS_MAP.items():
+    for tool_key, (tool_target, tool_name) in SYSTEM_TOOLS_MAP.items():
         if tool_key in cmd and (any(v in cmd for v in ACTION_VERBS) or len(cmd.split()) <= 3):
             try:
-                subprocess.Popen(tool_cmd, shell=True)
+                _launch_native_target(tool_target)
+                log_audit_event("launch_tool", tool_target, "safe", "success")
                 return {"status": "success", "message": f"जी सर, {tool_name} खोल दिया गया है।"}
             except Exception as e:
                 return {"status": "error", "message": f"{tool_name} शुरू करने में त्रुटि: {e}"}
@@ -502,10 +512,11 @@ def execute_os_action(command_str: str) -> dict:
     # =========================================================================
     # J. CHECK SHELL FOLDERS (Downloads, Documents, This PC, etc.)
     # =========================================================================
-    for f_key, (f_cmd, f_name) in FOLDERS_MAP.items():
+    for f_key, (f_uri, f_name) in FOLDERS_MAP.items():
         if f_key in cmd and (any(v in cmd for v in ACTION_VERBS) or len(cmd.split()) <= 3):
             try:
-                subprocess.Popen(f_cmd, shell=True)
+                os.startfile(f_uri)
+                log_audit_event("open_folder", f_uri, "safe", "success")
                 return {"status": "success", "message": f"जी सर, {f_name} खोल दिया गया है।"}
             except Exception as e:
                 return {"status": "error", "message": f"{f_name} खोलने में समस्या: {e}"}
@@ -527,6 +538,9 @@ def execute_os_action(command_str: str) -> dict:
     if not (has_action_verb or is_standalone_app):
         return {"status": "not_handled", "message": "Command not recognized as a desktop action."}
 
+# Backward compatibility alias
+execute_os_action = execute_os_command
+
     # Extract clean target by removing action verbs and filler words
     cleaned = cmd
     for word in sorted(ACTION_VERBS + FILLER_WORDS, key=len, reverse=True):
@@ -537,33 +551,40 @@ def execute_os_action(command_str: str) -> dict:
     if "tradingview" in target or "chart" in target or "charts" in target:
         if "nifty" in cmd or "निफ्टी" in cmd:
             webbrowser.open("https://www.tradingview.com/chart/?symbol=NSE:NIFTY")
+            log_audit_event("open_url", "TradingView:NIFTY", "safe", "success")
             return {"status": "success", "message": "जी सर, निफ्टी का लाइव ट्रेडिंगव्यू चार्ट खोल दिया गया है।"}
         elif "bank" in cmd or "बैंक" in cmd:
             webbrowser.open("https://www.tradingview.com/chart/?symbol=NSE:BANKNIFTY")
+            log_audit_event("open_url", "TradingView:BANKNIFTY", "safe", "success")
             return {"status": "success", "message": "जी सर, बैंकनिफ्टी का लाइव ट्रेडिंगव्यू चार्ट खोल दिया गया है।"}
         elif "btc" in cmd or "bitcoin" in cmd or "बिटकॉइन" in cmd:
             webbrowser.open("https://www.tradingview.com/chart/?symbol=BINANCE:BTCUSDT")
+            log_audit_event("open_url", "TradingView:BTCUSDT", "safe", "success")
             return {"status": "success", "message": "जी सर, बिटकॉइन का लाइव चार्ट खोल दिया गया है।"}
         else:
             webbrowser.open("https://www.tradingview.com")
+            log_audit_event("open_url", "TradingView", "safe", "success")
             return {"status": "success", "message": "जी सर, ट्रेडिंगव्यू खोल दिया गया है।"}
 
     # Check against URL_MAP (Websites)
     for key, url in URL_MAP.items():
         if key == target or f" {key} " in f" {target} " or (len(key) >= 4 and key in target):
             webbrowser.open(url)
+            log_audit_event("open_url", url, "safe", "success")
             return {"status": "success", "message": f"जी सर, {key.title()} खोल दिया गया है।"}
 
     # Check against APP_MAP (Desktop Applications)
-    for app_key, run_cmd in APP_MAP.items():
+    for app_key, exe_target in APP_MAP.items():
         if app_key == target or f" {app_key} " in f" {target} " or (len(app_key) >= 4 and app_key in target):
             try:
                 if app_key in ["vscode", "code", "editor"]:
                     if not shutil.which("code"):
                         webbrowser.open("https://vscode.dev")
+                        log_audit_event("open_url", "https://vscode.dev", "safe", "success")
                         return {"status": "success", "message": "जी सर, VS Code Web एडिटर खोल दिया गया है।"}
                 
-                subprocess.Popen(run_cmd, shell=True)
+                _launch_native_target(exe_target)
+                log_audit_event("launch_app", exe_target, "medium", "success")
                 return {"status": "success", "message": f"जी सर, {app_key.title()} लॉन्च कर दिया गया है।"}
             except Exception as e:
                 return {"status": "error", "message": f"{app_key.title()} शुरू करने में समस्या आई: {str(e)}"}
@@ -574,6 +595,7 @@ def execute_os_action(command_str: str) -> dict:
         domain = domain_match.group(1)
         full_url = f"https://{domain}"
         webbrowser.open(full_url)
+        log_audit_event("open_url", full_url, "safe", "success")
         return {"status": "success", "message": f"जी सर, {domain} खोल दिया गया है।"}
 
     # Generic website fallback if user explicitly said 'kholo' or 'open'
@@ -581,6 +603,10 @@ def execute_os_action(command_str: str) -> dict:
         clean_target = re.sub(r'[^a-zA-Z0-9]', '', target)
         if clean_target:
             webbrowser.open(f"https://www.{clean_target}.com")
+            log_audit_event("open_url", f"https://www.{clean_target}.com", "safe", "success")
             return {"status": "success", "message": f"जी सर, {clean_target.title()} वेबसाइट खोल दी गई है।"}
 
     return {"status": "not_handled", "message": "Command not recognized as a desktop action."}
+
+# Backward compatibility alias
+execute_os_action = execute_os_command

@@ -7,6 +7,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
 class Settings(BaseModel):
+    BASE_DIR: Path = BASE_DIR
     HOST: str = os.getenv("HOST", "127.0.0.1")
     PORT: int = int(os.getenv("PORT", "8000"))
     DEBUG: bool = os.getenv("DEBUG", "True").lower() == "true"
@@ -56,9 +57,29 @@ class Settings(BaseModel):
     FIREBASE_PROJECT_ID: str = os.getenv("FIREBASE_PROJECT_ID", "eduosai")
     FIREBASE_CREDENTIALS_PATH: str = os.getenv("FIREBASE_CREDENTIALS_PATH", "")
 
-    # Vision & Automation Settings
+    # Privacy & Automation Defaults
     ENABLE_SCREEN_VISION: bool = os.getenv("ENABLE_SCREEN_VISION", "True").lower() == "true"
+    ENABLE_WAKE_WORD_DEFAULT: bool = os.getenv("ENABLE_WAKE_WORD_DEFAULT", "False").lower() == "true"
     MORNING_BRIEFING_TIME: str = os.getenv("MORNING_BRIEFING_TIME", "09:00")
     DEFAULT_USER_CITY: str = os.getenv("USER_LOCATION", "Dullahpur, Uttar Pradesh")
+
+    # Security & Session
+    SESSION_TOKEN: str = os.getenv("SESSION_TOKEN", "jarvis-apex-session-key-v2")
+    ALLOWED_ORIGINS: list[str] = [
+        "http://127.0.0.1:8000",
+        "http://localhost:8000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3000",
+        "pywebview://localhost",
+        "http://localhost",
+        "http://127.0.0.1"
+    ]
+    MAX_UPLOAD_SIZE_BYTES: int = 25 * 1024 * 1024  # 25 MB
+    DATA_DIR: Path = BASE_DIR / "data"
+    LOGS_DIR: Path = BASE_DIR / "logs"
+
+    # Ollama Local Private LLM
+    OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "llama3.2")
 
 settings = Settings()

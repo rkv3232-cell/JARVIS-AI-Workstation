@@ -237,6 +237,20 @@ async def process_user_intent(user_input: str, progress_callback: Optional[Any] 
     # 1. OS DESKTOP AUTOMATION ACTIONS (High Priority for instant execution)
     # =========================================================================
     os_result = execute_os_action(query)
+    if os_result.get("status") == "pending_confirmation":
+        reply = os_result.get("message", "सुरक्षा पुष्टि आवश्यक है।")
+        log_conversation("jarvis", reply, intent="action_confirmation")
+        return {
+            "text": reply,
+            "action_executed": "pending_confirmation",
+            "intent": "action_confirmation",
+            "dynamic_widget": {
+                "type": "action_confirmation",
+                "title": "सुरक्षा पुष्टि आवश्यक (Two-Step Confirmation)",
+                "data": os_result.get("pending_action", {})
+            }
+        }
+
     if os_result["status"] == "success":
         reply = os_result.get("message", "जी सर, एप्लिकेशन खोल दिया गया है।")
         log_conversation("jarvis", reply, intent="os_action")

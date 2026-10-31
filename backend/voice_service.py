@@ -1,22 +1,111 @@
 import os
+import time
 import base64
 import asyncio
 import hashlib
+from enum import Enum
 from pathlib import Path
+from typing import Dict, Any, List, Optional
 import httpx
+
 from .config import settings
+from .security import privacy_guard, log_audit_event
 
 AUDIO_CACHE_DIR = Path(__file__).resolve().parent.parent / "frontend" / "audio_cache"
 AUDIO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+# =========================================================================
+# 1. VOICE STATE MACHINE
+# =========================================================================
+class VoiceState(str, Enum):
+    IDLE = "IDLE"
+    LISTENING = "LISTENING"
+    CAPTURING = "CAPTURING"
+    TRANSCRIBING = "TRANSCRIBING"
+    THINKING = "THINKING"
+    SPEAKING = "SPEAKING"
+    INTERRUPTED = "INTERRUPTED"
+    ERROR = "ERROR"
+
+class VoiceStateManager:
+    """
+    Manages explicit voice state transitions and real-time audio interruption.
+    Cancels active TTS synthesis and tells connected frontends to halt playback.
+    """
+    def __init__(self):
+        self.current_state = VoiceState.IDLE
+        self.state_history: List[Dict[str, Any]] = []
+        self._current_tts_task: Optional[asyncio.Task] = None
+        self._lock = asyncio.Lock()
+        self._broadcast_callback = None
+
+    def set_broadcast_callback(self, cb):
+        self._broadcast_callback = cb
+
+    async def transition_to(self, new_state: VoiceState, details: Optional[str] = None):
+        async with self._lock:
+            old = self.current_state
+            self.current_state = new_state
+            entry = {
+                "from": old.value,
+                "to": new_state.value,
+                "timestamp": time.time(),
+                "details": details
+            }
+            self.state_history.append(entry)
+            if len(self.state_history) > 50:
+                self.state_history = self.state_history[-50:]
+
+        if self._broadcast_callback:
+            try:
+                await self._broadcast_callback("voice_state", {
+                    "state": new_state.value,
+                    "previous": old.value,
+                    "timestamp": time.time(),
+                    "details": details
+                })
+            except Exception:
+                pass
+
+    async def interrupt(self) -> Dict[str, Any]:
+        """
+        Immediately cancels active speech playback/generation and resets to LISTENING.
+        """
+        interrupted_from = self.current_state
+        if self._current_tts_task and not self._current_tts_task.done():
+            self._current_tts_task.cancel()
+            self._current_tts_task = None
+
+        await self.transition_to(VoiceState.INTERRUPTED, details="User initiated voice interruption")
+        log_audit_event("voice_interrupted", "tts_playback", "safe", "success")
+
+        # Automatically transition back to LISTENING after acknowledgment
+        asyncio.create_task(self._post_interrupt_transition())
+        return {
+            "success": True,
+            "was_speaking": interrupted_from in [VoiceState.SPEAKING, VoiceState.THINKING],
+            "new_state": VoiceState.INTERRUPTED.value
+        }
+
+    async def _post_interrupt_transition(self):
+        await asyncio.sleep(0.3)
+        await self.transition_to(VoiceState.LISTENING)
+
+    def register_tts_task(self, task: asyncio.Task):
+        self._current_tts_task = task
+
+voice_state_machine = VoiceStateManager()
+
+# =========================================================================
+# 2. TTS GENERATION & CACHING
+# =========================================================================
 
 def _get_cache_filename(text: str) -> str:
     h = hashlib.md5(text.encode("utf-8")).hexdigest()[:16]
     return f"cache_{h}.mp3"
 
 async def _generate_edge_tts(text: str, file_path: Path) -> bool:
-    """
-    Generates natural high-fidelity Hindi neural voice via Microsoft Edge-TTS.
-    """
+    """Generates natural high-fidelity Hindi neural voice via Microsoft Edge-TTS."""
     try:
         import edge_tts
         voice = settings.JARVIS_VOICE or "hi-IN-MadhurNeural"
@@ -29,9 +118,7 @@ async def _generate_edge_tts(text: str, file_path: Path) -> bool:
     return False
 
 def _generate_gtts(text: str, file_path: Path):
-    """
-    gTTS fallback with native Hindi pronunciation.
-    """
+    """gTTS fallback with native Hindi pronunciation."""
     try:
         from gtts import gTTS
         tts = gTTS(text=text, lang="hi", slow=False)
@@ -40,9 +127,7 @@ def _generate_gtts(text: str, file_path: Path):
         print(f"[VoiceService] gTTS notice: {e}")
 
 async def _generate_sarvam_tts(text: str, file_path: Path) -> bool:
-    """
-    Generates ultra-realistic Indian Hinglish human voice using Sarvam AI (Bulbul).
-    """
+    """Generates ultra-realistic Indian Hinglish human voice using Sarvam AI (Bulbul)."""
     if not settings.SARVAM_API_KEY:
         return False
 
@@ -65,7 +150,7 @@ async def _generate_sarvam_tts(text: str, file_path: Path) -> bool:
         else:
             speaker = "shubh"
 
-        # Guard against Sarvam 500-char per-input limit
+        # Guard against Sarvam 500-char limit
         tts_input = text
         if len(tts_input) > 480:
             last_punct = max(tts_input.rfind("।", 0, 480), tts_input.rfind(".", 0, 480), tts_input.rfind("?", 0, 480))
@@ -93,8 +178,6 @@ async def _generate_sarvam_tts(text: str, file_path: Path) -> bool:
                         audio_bytes = base64.b64decode(audios[0])
                         file_path.write_bytes(audio_bytes)
                         return True
-                else:
-                    print(f"[VoiceService] Sarvam AI ({model_name}) status {res.status_code}: {res.text[:120]}")
         except Exception as e:
             print(f"[VoiceService] Sarvam AI ({model_name}) connection error: {e}")
 
@@ -117,10 +200,7 @@ COMMON_PHRASES = [
 ]
 
 async def prewarm_voice_cache():
-    """
-    Background worker that pre-synthesizes common system replies.
-    Guarantees instant (<1ms) audio availability upon first command.
-    """
+    """Background worker that pre-synthesizes common system replies."""
     for phrase in COMMON_PHRASES:
         try:
             cache_name = _get_cache_filename(phrase)
@@ -132,8 +212,7 @@ async def prewarm_voice_cache():
 
 async def generate_speech_file(text: str, filename: str = "latest_reply.mp3") -> str:
     """
-    Generates natural human-like voice audio for Hinglish text with instant MD5 caching.
-    Cached common answers return in <1ms (0.001s).
+    Generates natural human-like voice audio for Hinglish text with sub-millisecond MD5 caching.
     """
     clean_text = text.replace("*", "").replace("#", "").replace("`", "").strip()
     if not clean_text:
@@ -166,8 +245,10 @@ async def transcribe_audio_bytes(audio_bytes: bytes, filename: str = "input_audi
     1. Groq Whisper (whisper-large-v3-turbo) - sub-300ms latency
     2. Sarvam AI Saaras (saaras:v4) - Fine-tuned for Indian Hindi & accents
     """
-    if not audio_bytes:
+    if not audio_bytes or privacy_guard.mic_kill_switch:
         return ""
+
+    await voice_state_machine.transition_to(VoiceState.TRANSCRIBING)
 
     mime_type = "audio/wav"
     if filename.endswith(".webm"):
@@ -212,3 +293,29 @@ async def transcribe_audio_bytes(audio_bytes: bytes, filename: str = "input_audi
             print(f"[VoiceService] Sarvam Saaras STT exception: {e}")
 
     return ""
+
+def list_audio_devices() -> Dict[str, Any]:
+    """Enumerates available microphone and speaker hardware devices."""
+    try:
+        import sounddevice as sd
+        devices = sd.query_devices()
+        input_devs = []
+        output_devs = []
+        default_in = sd.default.device[0] if sd.default.device else -1
+        default_out = sd.default.device[1] if sd.default.device else -1
+
+        for idx, dev in enumerate(devices):
+            if dev.get("max_input_channels", 0) > 0:
+                input_devs.append({"id": idx, "name": dev.get("name"), "is_default": idx == default_in})
+            if dev.get("max_output_channels", 0) > 0:
+                output_devs.append({"id": idx, "name": dev.get("name"), "is_default": idx == default_out})
+
+        return {
+            "success": True,
+            "inputs": input_devs,
+            "outputs": output_devs,
+            "default_input": default_in,
+            "default_output": default_out
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e), "inputs": [], "outputs": []}
