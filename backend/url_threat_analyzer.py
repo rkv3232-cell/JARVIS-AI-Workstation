@@ -2,8 +2,9 @@ import re
 import socket
 import urllib.parse
 import time
+import ipaddress
 import httpx
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 from .config import settings
 
 # High-Risk / Disposable Top-Level Domains heavily leveraged in scams
@@ -81,9 +82,93 @@ def parse_url_components(raw_url: str) -> Dict[str, Any]:
         "fragment": parsed.fragment
     }
 
+def is_ssrf_safe_ip(ip_str: str) -> bool:
+    """
+    Validates whether an IP address is a safe public Internet IP.
+    Blocks private networks (RFC 1918), loopback, link-local, carrier-grade NAT,
+    multicast, reserved, and cloud metadata IPs.
+    """
+    try:
+        ip = ipaddress.ip_address(ip_str)
+        if (
+            ip.is_private or
+            ip.is_loopback or
+            ip.is_link_local or
+            ip.is_reserved or
+            ip.is_multicast or
+            ip.is_unspecified
+        ):
+            return False
+
+        # IPv4-mapped IPv6 check (e.g. ::ffff:127.0.0.1)
+        if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+            mapped = ip.ipv4_mapped
+            if mapped.is_private or mapped.is_loopback or mapped.is_link_local:
+                return False
+
+        # Explicit Cloud Metadata IP blocking
+        blocked_specific = {"169.254.169.254", "169.254.170.2", "100.100.100.200"}
+        if str(ip) in blocked_specific:
+            return False
+
+        return True
+    except ValueError:
+        return False
+
+def validate_url_for_ssrf(url: str) -> Tuple[bool, Optional[str], Optional[str]]:
+    """
+    Validates scheme and resolves all IP addresses for a URL to verify SSRF safety.
+    Returns: (is_safe, resolved_ip, error_message)
+    """
+    try:
+        parsed = urllib.parse.urlparse(url)
+    except Exception as e:
+        return False, None, f"Malformed URL: {e}"
+
+    scheme = (parsed.scheme or "").lower()
+    if scheme not in ("http", "https"):
+        return False, None, f"Blocked unsafe scheme '{scheme}'. Only HTTP and HTTPS are permitted."
+
+    host = parsed.hostname
+    if not host:
+        return False, None, "URL is missing a valid hostname."
+
+    # Direct hostname blocklist
+    host_lower = host.lower()
+    blocked_hosts = {
+        "localhost", "127.0.0.1", "::1", "metadata.google.internal",
+        "instance-data", "metadata", "host.docker.internal"
+    }
+    if host_lower in blocked_hosts or host_lower.endswith(".local") or host_lower.endswith(".internal"):
+        return False, None, f"Access to restricted hostname '{host}' is blocked for SSRF protection."
+
+    # Check if host is direct IP literal
+    try:
+        ip_direct = ipaddress.ip_address(host)
+        if not is_ssrf_safe_ip(str(ip_direct)):
+            return False, str(ip_direct), f"Access to private or restricted IP '{host}' is blocked for SSRF protection."
+        return True, str(ip_direct), None
+    except ValueError:
+        pass
+
+    # Resolve all addresses via DNS
+    try:
+        addr_info = socket.getaddrinfo(host, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        resolved_ips = list({item[4][0] for item in addr_info})
+        if not resolved_ips:
+            return False, None, f"DNS resolution failed for host '{host}'."
+        for rip in resolved_ips:
+            if not is_ssrf_safe_ip(rip):
+                return False, rip, f"Host '{host}' resolves to restricted IP address '{rip}' (SSRF Blocked)."
+        return True, resolved_ips[0], None
+    except socket.gaierror as e:
+        return False, None, f"Could not resolve host '{host}': {e}"
+    except Exception as e:
+        return False, None, f"SSRF resolution check failed: {e}"
+
 async def probe_url_safely(url: str) -> Dict[str, Any]:
     """
-    Safely inspects the destination without executing JavaScript.
+    Safely inspects the destination with comprehensive SSRF protection and manual redirect validation.
     Fetches HTTP status, final redirected URL, page title, and server headers.
     """
     headers = {
@@ -101,46 +186,70 @@ async def probe_url_safely(url: str) -> Dict[str, Any]:
         "ip_address": None
     }
 
-    # 1. Resolve IP
+    # 1. SSRF Validation on initial URL
+    is_safe, resolved_ip, ssrf_err = validate_url_for_ssrf(url)
+    if not is_safe:
+        probe_result["ip_address"] = resolved_ip
+        probe_result["probe_error"] = f"SSRF_BLOCKED: {ssrf_err}"
+        return probe_result
+
+    probe_result["ip_address"] = resolved_ip
+
+    # 2. HTTP Probe with manual redirect checking to prevent redirect-based SSRF
+    current_url = url
+    redirect_count = 0
+    max_redirects = 5
+
     try:
-        parsed = urllib.parse.urlparse(url)
-        host = parsed.netloc.split(":")[0]
-        ip = socket.gethostbyname(host)
-        probe_result["ip_address"] = ip
-    except Exception:
-        pass
+        async with httpx.AsyncClient(timeout=4.0, follow_redirects=False) as client:
+            while redirect_count < max_redirects:
+                resp = await client.get(current_url, headers=headers)
+                probe_result["reachable"] = True
+                probe_result["status_code"] = resp.status_code
+                probe_result["final_url"] = str(resp.url)
+                probe_result["server"] = resp.headers.get("server")
 
-    # 2. HTTP Probe
-    try:
-        async with httpx.AsyncClient(timeout=4.0, follow_redirects=True) as client:
-            resp = await client.get(url, headers=headers)
-            probe_result["reachable"] = True
-            probe_result["status_code"] = resp.status_code
-            probe_result["final_url"] = str(resp.url)
-            probe_result["redirect_count"] = len(resp.history)
-            probe_result["server"] = resp.headers.get("server")
+                # Handle redirect
+                if resp.is_redirect or resp.status_code in (301, 302, 303, 307, 308):
+                    redirect_location = resp.headers.get("Location")
+                    if not redirect_location:
+                        break
 
-            html_text = resp.text[:25000] # Analyze first 25KB
-            title_m = re.search(r'<title>(.*?)</title>', html_text, re.IGNORECASE | re.DOTALL)
-            if title_m:
-                probe_result["page_title"] = title_m.group(1).strip()
+                    next_url = urllib.parse.urljoin(current_url, redirect_location)
+                    # SSRF Validate redirect target before following!
+                    is_redir_safe, redir_ip, redir_err = validate_url_for_ssrf(next_url)
+                    if not is_redir_safe:
+                        probe_result["probe_error"] = f"SSRF_BLOCKED_ON_REDIRECT: {redir_err}"
+                        probe_result["final_url"] = next_url
+                        return probe_result
 
-            # Meta description
-            meta_m = re.search(r'<meta\s+name=["\']description["\']\s+content=["\'](.*?)["\']', html_text, re.IGNORECASE)
-            if not meta_m:
-                meta_m = re.search(r'<meta\s+property=["\']og:description["\']\s+content=["\'](.*?)["\']', html_text, re.IGNORECASE)
-            if meta_m:
-                probe_result["meta_description"] = meta_m.group(1).strip()
+                    current_url = next_url
+                    redirect_count += 1
+                    probe_result["redirect_count"] = redirect_count
+                else:
+                    # Final response reached
+                    html_text = resp.text[:25000] # Analyze first 25KB
+                    title_m = re.search(r'<title>(.*?)</title>', html_text, re.IGNORECASE | re.DOTALL)
+                    if title_m:
+                        probe_result["page_title"] = title_m.group(1).strip()
 
-            # Clean text extraction for Knowledge Synthesis
-            paras = re.findall(r'<p[^>]*>(.*?)</p>', html_text, re.IGNORECASE | re.DOTALL)
-            clean_paras = []
-            for p in paras:
-                cp = re.sub(r'<[^>]+>', '', p).strip()
-                if len(cp) > 40:
-                    clean_paras.append(cp)
-            if clean_paras:
-                probe_result["content_summary"] = " ".join(clean_paras[:3])
+                    # Meta description
+                    meta_m = re.search(r'<meta\s+name=["\']description["\']\s+content=["\'](.*?)["\']', html_text, re.IGNORECASE)
+                    if not meta_m:
+                        meta_m = re.search(r'<meta\s+property=["\']og:description["\']\s+content=["\'](.*?)["\']', html_text, re.IGNORECASE)
+                    if meta_m:
+                        probe_result["meta_description"] = meta_m.group(1).strip()
+
+                    # Clean text extraction for Knowledge Synthesis
+                    paras = re.findall(r'<p[^>]*>(.*?)</p>', html_text, re.IGNORECASE | re.DOTALL)
+                    clean_paras = []
+                    for p in paras:
+                        cp = re.sub(r'<[^>]+>', '', p).strip()
+                        if len(cp) > 40:
+                            clean_paras.append(cp)
+                    if clean_paras:
+                        probe_result["content_summary"] = " ".join(clean_paras[:3])
+                    break
     except Exception as e:
         probe_result["probe_error"] = str(e)
 
@@ -161,6 +270,20 @@ async def analyze_url_threat(raw_url: str, context_text: Optional[str] = None) -
     risk_score = 0
     threat_indicators = []
     scam_types = []
+
+    # Probe live network status safely with SSRF protection
+    probe = await probe_url_safely(raw_url)
+
+    # Indicator 0: SSRF Probe Attack
+    if probe.get("probe_error", "").startswith("SSRF_BLOCKED"):
+        risk_score += 95
+        scam_types.append("Internal Network SSRF Probing")
+        threat_indicators.append({
+            "code": "SSRF_ATTEMPT",
+            "severity": "CRITICAL",
+            "title": "आंतरिक नेटवर्क घुसपैठ प्रयास (SSRF Blocked)",
+            "detail": f"यह URL निजी या आंतरिक नेटवर्क (Localhost/Private IP) को लक्षित कर रहा था। सुरक्षा नीति द्वारा इसे तुरंत ब्लॉक कर दिया गया: {probe['probe_error']}"
+        })
 
     # Indicator 1: Disposable / Suspicious TLD
     if tld in HIGH_RISK_TLDS:
@@ -235,8 +358,7 @@ async def analyze_url_threat(raw_url: str, context_text: Optional[str] = None) -
             "detail": "वेबसाइट पर कोई वैध SSL सुरक्षा प्रमाणपत्र (HTTPS) नहीं है।"
         })
 
-    # Probe live network status safely
-    probe = await probe_url_safely(raw_url)
+    # Check probed page metadata
     if probe.get("page_title"):
         title_lower = probe["page_title"].lower()
         if any(w in title_lower for w in ["airtel", "jio", "gift", "दिवाली", "cash", "recharge"]):

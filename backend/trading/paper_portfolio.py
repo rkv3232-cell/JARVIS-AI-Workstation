@@ -114,6 +114,12 @@ class PaperTradingPortfolio:
     @classmethod
     def get_portfolio_summary(cls, live_prices: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
         live_prices = live_prices or {}
+        # Evaluate pending orders and TP/SL triggers against active live ticks
+        if live_prices:
+            for s, p in live_prices.items():
+                if isinstance(p, (int, float)) and p > 0:
+                    cls.evaluate_pending_orders_and_triggers(s, float(p))
+
         with _portfolio_lock, sqlite3.connect(str(DB_PATH)) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()

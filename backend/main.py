@@ -166,9 +166,22 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"[Lifespan] Wake listener initialization notice: {e}")
 
+    # Start background workflow scheduler
+    try:
+        from .workflows.workflow_engine import workflow_scheduler
+        workflow_scheduler.start()
+    except Exception as e:
+        print(f"[Lifespan] Workflow scheduler initialization notice: {e}")
+
     yield
 
     # Clean shutdown
+    try:
+        from .workflows.workflow_engine import workflow_scheduler
+        workflow_scheduler.stop()
+    except Exception:
+        pass
+
     try:
         from .local_wake_listener import stop_local_wake_listener
         stop_local_wake_listener()
@@ -282,7 +295,7 @@ async def confirm_action_endpoint(payload: ActionConfirmPayload):
     if not ok or not action:
         raise HTTPException(status_code=400, detail=msg)
     
-    result = execute_confirmed_action(action)
+    result = await execute_confirmed_action(action)
     action.status = "executed" if result.get("success") else "failed"
     return {"success": result.get("success", False), "action": action.to_dict(), "result": result}
 
@@ -710,14 +723,29 @@ async def chat_endpoint(req: ChatRequest):
 
 @app.post("/api/transcribe", dependencies=[Depends(verify_session_token)])
 async def transcribe_endpoint(file: UploadFile = File(...)):
-    audio_bytes = await file.read()
     filename = file.filename or "input.wav"
     
-    # Secure upload validation
-    is_valid, reason = validate_upload_file(filename, len(audio_bytes))
-    if not is_valid:
+    # 1. Immediate extension and filename sanitization check before reading bytes
+    is_valid_name, reason = validate_upload_file(filename, 0)
+    if not is_valid_name and "size" not in reason.lower():
         raise HTTPException(status_code=400, detail=reason)
 
+    # 2. Chunk-by-chunk bounded streaming read to prevent memory exhaustion
+    CHUNK_SIZE = 64 * 1024  # 64 KB
+    buffer = bytearray()
+    total_read = 0
+
+    while chunk := await file.read(CHUNK_SIZE):
+        total_read += len(chunk)
+        if total_read > settings.MAX_UPLOAD_SIZE_BYTES:
+            await file.close()
+            raise HTTPException(
+                status_code=413,
+                detail=f"File exceeds maximum allowed upload size of {settings.MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)} MB."
+            )
+        buffer.extend(chunk)
+
+    audio_bytes = bytes(buffer)
     transcript = await transcribe_audio_bytes(audio_bytes, filename=filename)
     return {"text": transcript}
 

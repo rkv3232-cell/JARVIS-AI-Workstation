@@ -13,6 +13,10 @@ from cryptography.hazmat.primitives.asymmetric import ed25519
 from .config import settings
 from .security import log_audit_event
 
+class SecurityError(Exception):
+    """Raised when a security validation failure or malicious payload (e.g. ZIP Slip) occurs."""
+    pass
+
 UPDATES_DIR = settings.BASE_DIR / "updates"
 STAGING_DIR = UPDATES_DIR / "staging"
 BACKUP_DIR = UPDATES_DIR / "backup"
@@ -200,8 +204,7 @@ class SecureAutoUpdater:
         try:
             if not snapshot_path.exists():
                 return False
-            with zipfile.ZipFile(snapshot_path, "r") as zf:
-                zf.extractall(settings.BASE_DIR)
+            cls.safe_extract_zip(snapshot_path, settings.BASE_DIR)
             cls._record_history("ROLLBACK", f"Rolled back to {snapshot_path.name}")
             log_audit_event("rollback_update", str(snapshot_path), "high", "success")
             return True

@@ -210,3 +210,113 @@ async def test_provider_health_probe_accuracy():
     assert "reachable" in sarvam
     assert "authenticated" in sarvam
 
+# --------------------------------------------------------------------------
+# 7. SSRF Protection & Scheme Validation
+# --------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_ssrf_protection_blocks_internal_ips_and_schemes():
+    from backend.url_threat_analyzer import validate_url_for_ssrf, probe_url_safely, analyze_url_threat
+
+    # 1. Scheme checks
+    safe_file, _, err = validate_url_for_ssrf("file:///etc/passwd")
+    assert safe_file is False
+    assert "Blocked unsafe scheme" in err
+
+    safe_gopher, _, _ = validate_url_for_ssrf("gopher://127.0.0.1:6379")
+    assert safe_gopher is False
+
+    # 2. Localhost & Private IP checks
+    safe_local, _, err_loc = validate_url_for_ssrf("http://127.0.0.1:8000/api/os/execute")
+    assert safe_local is False
+    assert "blocked" in err_loc.lower()
+
+    safe_priv, _, _ = validate_url_for_ssrf("http://192.168.1.1")
+    assert safe_priv is False
+
+    safe_meta, _, _ = validate_url_for_ssrf("http://169.254.169.254/latest/meta-data/")
+    assert safe_meta is False
+
+    # 3. Probe with internal URL should return SSRF_BLOCKED
+    probe_res = await probe_url_safely("http://127.0.0.1:8000")
+    assert "SSRF_BLOCKED" in probe_res.get("probe_error", "")
+
+    # 4. Threat analysis should flag SSRF attempt with critical score
+    threat_res = await analyze_url_threat("http://127.0.0.1:8000")
+    assert threat_res["threat_level"] == "CRITICAL"
+    assert any("SSRF" in s for s in threat_res["scam_types"])
+
+# --------------------------------------------------------------------------
+# 8. Workflow Approval Resumption
+# --------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_workflow_approval_resumption():
+    from backend.security import action_registry
+    from backend.os_controller import execute_confirmed_action
+
+    wf_id = "wf_test_approval_resumption"
+    wf_data = {
+        "id": wf_id,
+        "name": "Approval Resumption Test Workflow",
+        "trigger_type": "manual",
+        "trigger_config": {},
+        "condition_config": {"type": "always_true"},
+        "action_type": "send_notification",
+        "action_params": {"title": "Resumed", "message": "Resumed successfully"},
+        "requires_approval": 1
+    }
+    WorkflowEngine.create_workflow(wf_data)
+
+    # Run workflow -> must pause at PENDING_APPROVAL
+    run_res = await WorkflowEngine.run_workflow(wf_id, is_dry_run=False)
+    assert run_res["status"] == "PENDING_APPROVAL"
+    action_id = run_res["action_id"]
+
+    # User confirms the action
+    ok, msg, action = action_registry.approve(action_id)
+    assert ok is True
+    assert action is not None
+
+    # System resumes workflow execution through execute_confirmed_action
+    exec_res = await execute_confirmed_action(action)
+    assert exec_res["success"] is True
+    assert exec_res["status"] == "COMPLETED"
+
+    # Cleanup
+    WorkflowEngine.delete_workflow(wf_id)
+
+# --------------------------------------------------------------------------
+# 9. Smart Money Concepts FVG No-Lookahead Bar Alignment
+# --------------------------------------------------------------------------
+def test_smc_fvg_no_lookahead_bar_alignment():
+    from backend.trading.strategy_lab import detect_smc_structures
+
+    candles = [
+        {"time": 1, "open": 100, "high": 105, "low": 98, "close": 102, "volume": 100},
+        {"time": 2, "open": 103, "high": 120, "low": 102, "close": 118, "volume": 200},
+        {"time": 3, "open": 118, "high": 130, "low": 115, "close": 128, "volume": 300},
+    ]
+    # Candle 3 Low (115) > Candle 1 High (105).
+    # FVG is ONLY confirmed when candle 3 (bar index 2) has formed.
+    smc = detect_smc_structures(candles)
+    assert len(smc["fvgs"]) == 1
+    fvg = smc["fvgs"][0]
+    assert fvg["type"] == "BULLISH_FVG"
+    # Bar index MUST be 2 (the confirmation bar), NEVER 1 (which would create lookahead leakage into previous bar)
+    assert fvg["bar_index"] == 2
+    assert fvg["time"] == 3
+
+# --------------------------------------------------------------------------
+# 10. Honest Vision Fallback (Zero Hallucinated Chart Overlays)
+# --------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_vision_honest_fallback_reporting():
+    from backend.ai_screen_vision import detect_chart_patterns_and_overlays
+
+    # Without an active image or with API failure, must report failure honestly
+    res = await detect_chart_patterns_and_overlays(image_base64="")
+    assert res["success"] is False
+    assert res["patterns_detected"] == []
+    assert res["overlays"] == []
+    assert "उपलब्ध नहीं" in res["summary"] or "अनुपलब्ध" in res["summary"]
+
+

@@ -8,6 +8,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [2.1.1] - 2026-10-31
 
+### 🔒 Security, SSRF & Frontend XSS Hardening
+- **Added:** Enterprise-grade Server-Side Request Forgery (SSRF) protection in `backend/url_threat_analyzer.py` (`is_ssrf_safe_ip`, `validate_url_for_ssrf`). Rejects loopback (`127.0.0.1`, `localhost`, `::1`), private RFC 1918 subnets, link-local addresses, and cloud metadata endpoints (`169.254.169.254`, `metadata.google.internal`).
+- **Added:** Manual redirect inspection validating destination IP on each redirect hop up to 5 levels to prevent redirect-based SSRF.
+- **Added:** Memory exhaustion defense on `/api/transcribe`: validates filename before byte ingestion and performs chunked streaming reading (64KB chunks) capped at `settings.MAX_UPLOAD_SIZE_BYTES`, aborting with HTTP 413 upon overflow.
+- **Added:** Comprehensive Frontend XSS defense in `frontend/app.js` with `escapeHtml()` sanitization across chat feeds, persistent memory views, workflow templates, execution histories, and confirmation dialogs.
+
+### 👁️ AI Vision Reliability & Honest Fallbacks
+- **Eliminated:** Hallucinated screen perceptions in `backend/ai_screen_vision.py`. When vision AI providers fail or are unreachable, returns clear `is_fallback: True` and explicit notice rather than fabricated statements.
+- **Eliminated:** Fabricated chart pattern overlays with hardcoded support levels on provider failure. Returns `success: False` with empty overlays list.
+- **Fixed:** Accurate clipboard error reporting: does not falsely report that code was copied to clipboard if `pyperclip.copy` failed.
+
+### ⚙️ Visual Workflow Automation Engine Completion
+- **Added:** Asynchronous `WorkflowScheduler` running in the FastAPI lifespan, periodically checking and triggering enabled time-scheduled workflows.
+- **Added:** Resumption of approved workflows: `execute_confirmed_action()` now handles `workflow_execution` actions by calling `WorkflowEngine.resume_confirmed_workflow()`.
+- **Added:** Genuine subsystems dispatching for allowlisted workflow actions (`send_notification`, `speak_voice_message`, `run_market_scan`, `open_url`, `set_system_theme`, `create_trade_journal`).
+
+### 📈 Trading Lab & SMC Bar Alignment
+- **Fixed:** Fair Value Gap (FVG) detection bar index aligned to bar $i$ (confirmation bar) with `c2["time"]`, eliminating look-ahead into the preceding bar $i-1$.
+- **Added:** Integrated pending limit and stop-loss/take-profit evaluation on all live price feeds in `PaperTradingPortfolio.get_portfolio_summary()`.
+
+### 📦 Desktop Packaging & Repository Hygiene
+- **Hardened:** ZIP-slip extraction defense (`safe_extract_zip`) applied to updater rollback snapshots.
+- **Fixed:** `scripts/build_windows_app.py` propagates PyInstaller exit codes correctly and supports `--onefile` or `--onedir`.
+- **Repository Hygiene:** Untracked 38 MP3 cache files (-16.9 MB) and git-ignored `frontend/audio_cache/`.
+- **Automated Tests:** 51 / 51 tests passed (100% success rate).
+
 ### 🔒 API & WebSocket Authentication Enforcement
 - **Enforced:** Applied `verify_session_token` dependency to all sensitive REST endpoints across OS controls, pending action approvals, audit logs, persistent memory, paper trading, and visual workflows.
 - **Enforced:** Strict Origin validation and token checking for WebSocket connections with code 1008 rejection for untrusted origins or invalid credentials.

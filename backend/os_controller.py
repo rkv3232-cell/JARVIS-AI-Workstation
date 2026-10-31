@@ -287,7 +287,7 @@ def _launch_native_target(target: str) -> bool:
             print(f"[Safe Launch Error] {target}: {e} / {e2}")
             return False
 
-def execute_confirmed_action(action: PendingAction) -> Dict[str, Any]:
+async def execute_confirmed_action(action: PendingAction) -> Dict[str, Any]:
     """
     Executes a high-impact operation that has received explicit user confirmation.
     Logs result to data/audit_log.json.
@@ -323,6 +323,14 @@ def execute_confirmed_action(action: PendingAction) -> Dict[str, Any]:
             dark_mode = params.get("dark_mode", True)
             res = set_windows_theme(dark_mode)
             log_audit_event("change_theme", "dark" if dark_mode else "light", "medium", "success", "user")
+            return res
+
+        elif act_type == "workflow_execution":
+            wf_id = params.get("workflow_id")
+            run_id = params.get("run_id")
+            from .workflows.workflow_engine import WorkflowEngine
+            res = await WorkflowEngine.resume_confirmed_workflow(wf_id, run_id)
+            log_audit_event("workflow_execution", wf_id, "high", "success" if res.get("success") else "failed", "user", res)
             return res
             
         return {"success": False, "message": f"अज्ञात कन्फर्मेशन एक्शन प्रकार: {act_type}"}

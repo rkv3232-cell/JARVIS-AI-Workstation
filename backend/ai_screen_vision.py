@@ -200,15 +200,17 @@ async def analyze_screen_with_ai(custom_query: Optional[str] = None, image_base6
         except Exception as e:
             print(f"[Vision] OpenRouter error: {e}")
 
-    # 3. Intelligent Real-Time Fallback
-    fallback_text = "जी सर, मैंने आपका लाइव स्क्रीन देख लिया है। डेस्कटॉप वर्कस्पेस और चार्ट एक्टिव हैं। मुख्य सपोर्ट लेवल इंटैक्ट है और प्राइस संतुलन में कंसोलिडेट कर रही है।"
+    # 3. Honest Error Fallback when providers fail
+    fallback_text = "सर, विज़न AI सेवा अनुपलब्ध होने के कारण स्क्रीन का वास्तविक विश्लेषण नहीं हो सका। कृपया अपनी AI API कुंजी या नेटवर्क कनेक्शन की जाँच करें।"
     _latest_screen_analysis = {
         "timestamp": time.time(),
         "text": fallback_text,
-        "summary": "Real-Time Screen Perception",
+        "summary": "Vision Provider Unavailable",
         "image_base64": b64_img,
-        "trend": "NEUTRAL",
-        "is_live_stream": True
+        "trend": "UNAVAILABLE",
+        "is_live_stream": True,
+        "is_fallback": True,
+        "success": False
     }
     return _latest_screen_analysis
 
@@ -294,21 +296,14 @@ Note: box_percent numbers must be between 0 and 100 representing percentage coor
         except Exception as e:
             print(f"[Vision 2.0] Pattern detection error on key: {e}")
 
-    # Fallback response
+    # Fallback response when provider fails
     return {
-        "success": True,
-        "trend": "NEUTRAL",
-        "summary": "सर, चार्ट पर मुख्य सपोर्ट और कंसोलिडेशन रेंज ट्रैक हो रही है। ओवरले बॉक्सेस तैयार हैं।",
-        "patterns_detected": ["Support Level", "Range Consolidation"],
-        "overlays": [
-            {
-                "label": "KEY SUPPORT",
-                "type": "support",
-                "color": "#10b981",
-                "box_percent": [68.0, 30.0, 72.0, 70.0],
-                "description": "Support demand zone identified"
-            }
-        ]
+        "success": False,
+        "trend": "UNAVAILABLE",
+        "summary": "सर, विज़न मॉडल अनुपलब्ध होने के कारण चार्ट पैटर्न डिटेक्ट नहीं हो सके। कृपया नेटवर्क या API कुंजी सत्यापित करें।",
+        "patterns_detected": [],
+        "overlays": [],
+        "is_fallback": True
     }
 
 async def extract_screen_text_and_clipboard(image_base64: Optional[str] = None) -> dict:
@@ -377,10 +372,13 @@ Do NOT enclose in markdown commentary or conversational greetings. Just the raw 
             print(f"[Vision OCR] Clipboard write error: {e}")
 
         preview = (raw_text[:120] + "...") if len(raw_text) > 120 else raw_text
-        spoken = "सर, स्क्रीन पर दिख रहा कोड सफलतापूर्वक आपके विंडोज़ क्लिपबोर्ड पर कॉपी कर दिया गया है। आप Ctrl+V दबाकर इसे कहीं भी पेस्ट कर सकते हैं।"
+        if clipboard_ok:
+            spoken = "सर, स्क्रीन पर दिख रहा कोड सफलतापूर्वक आपके विंडोज़ क्लिपबोर्ड पर कॉपी कर दिया गया है। आप Ctrl+V दबाकर इसे कहीं भी पेस्ट कर सकते हैं।"
+        else:
+            spoken = "सर, स्क्रीन से टेक्स्ट निकाल लिया गया है, लेकिन विंडोज़ क्लिपबोर्ड पर कॉपी करने में तकनीकी विफलता हुई।"
 
         return {
-            "success": True,
+            "success": clipboard_ok,
             "extracted_text": raw_text,
             "preview": preview,
             "char_count": len(raw_text),

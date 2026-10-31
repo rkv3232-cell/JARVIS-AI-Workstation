@@ -46,6 +46,10 @@ frontend/reports/*.html
 frontend/reports/*.png
 *.pdf
 
+# Generated Audio Cache
+frontend/audio_cache/
+*.mp3
+
 # OS & Editor
 .DS_Store
 Thumbs.db

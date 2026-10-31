@@ -20,6 +20,17 @@ window.fetch = function(url, options = {}) {
   return _origFetch.call(this, url, options);
 };
 
+// Robust HTML Sanitizer to Prevent XSS in Chat, Memories, and Workflows
+function escapeHtml(str) {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 // ==========================================================================
 // JARVIS-APEX CLIENT CONTROLLER
 // Dashboard UI: 100% English // Voice & Conversation: Pure Hindi / Hinglish
@@ -890,11 +901,14 @@ class JarvisClient {
     msgEl.className = `chat-msg ${isUser ? "user-msg" : "jarvis-msg"}`;
     const timeStr = new Date().toTimeString().split(" ")[0];
 
+    const safeSender = escapeHtml(sender);
+    const safeText = escapeHtml(text);
+
     msgEl.innerHTML = `
       <div class="msg-avatar">${isUser ? "U" : "J"}</div>
       <div class="msg-body">
-        <span class="msg-sender">${sender}</span>
-        <p>${text}</p>
+        <span class="msg-sender">${safeSender}</span>
+        <p>${safeText}</p>
         <span class="msg-time">${timeStr}</span>
       </div>
     `;
@@ -2568,10 +2582,10 @@ class JarvisClient {
     if (desc) desc.textContent = pendingAction.description;
     if (details) {
       details.innerHTML = `
-        <div><strong>Action:</strong> ${pendingAction.action_type}</div>
-        <div><strong>Target:</strong> ${pendingAction.target}</div>
-        <div><strong>Risk Level:</strong> <span class="badge warning-badge">${pendingAction.risk_level.toUpperCase()}</span></div>
-        <div><strong>ID:</strong> ${pendingAction.action_id}</div>
+        <div><strong>Action:</strong> ${escapeHtml(pendingAction.action_type)}</div>
+        <div><strong>Target:</strong> ${escapeHtml(pendingAction.target)}</div>
+        <div><strong>Risk Level:</strong> <span class="badge warning-badge">${escapeHtml(pendingAction.risk_level.toUpperCase())}</span></div>
+        <div><strong>ID:</strong> ${escapeHtml(pendingAction.action_id)}</div>
       `;
     }
 
@@ -3013,9 +3027,9 @@ class JarvisClient {
 
       let rows = items.map(m => `
         <tr>
-          <td><span class="badge">${m.category}</span></td>
-          <td>${m.content}</td>
-          <td><button class="action-btn danger-btn" onclick="window.jarvis.deleteMemoryItem('${m.id}')">Delete</button></td>
+          <td><span class="badge">${escapeHtml(m.category)}</span></td>
+          <td>${escapeHtml(m.content)}</td>
+          <td><button class="action-btn danger-btn" onclick="window.jarvis.deleteMemoryItem('${encodeURIComponent(m.id)}')">Delete</button></td>
         </tr>
       `).join("");
 
@@ -3052,14 +3066,14 @@ class JarvisClient {
       container.innerHTML = list.map(wf => `
         <div class="glass-card">
           <div style="display:flex; justify-content:space-between; align-items:center;">
-            <h3 style="margin:0;">${wf.name}</h3>
-            <span class="badge">${wf.trigger_type}</span>
+            <h3 style="margin:0;">${escapeHtml(wf.name)}</h3>
+            <span class="badge">${escapeHtml(wf.trigger_type)}</span>
           </div>
-          <p style="font-size:0.75rem; color:var(--text-secondary); margin:6px 0;">${wf.description || ''}</p>
-          <div style="font-size:0.72rem; color:var(--text-muted); margin-bottom:8px;">Action: <code>${wf.action_type}</code></div>
+          <p style="font-size:0.75rem; color:var(--text-secondary); margin:6px 0;">${escapeHtml(wf.description || '')}</p>
+          <div style="font-size:0.72rem; color:var(--text-muted); margin-bottom:8px;">Action: <code>${escapeHtml(wf.action_type)}</code></div>
           <div style="display:flex; gap:6px;">
-            <button class="action-btn primary-btn" onclick="window.jarvis.runWorkflow('${wf.id}', false)">▶ Run</button>
-            <button class="action-btn" onclick="window.jarvis.runWorkflow('${wf.id}', true)">🧪 Dry-Run</button>
+            <button class="action-btn primary-btn" onclick="window.jarvis.runWorkflow('${encodeURIComponent(wf.id)}', false)">▶ Run</button>
+            <button class="action-btn" onclick="window.jarvis.runWorkflow('${encodeURIComponent(wf.id)}', true)">🧪 Dry-Run</button>
           </div>
         </div>
       `).join("");
@@ -3077,9 +3091,9 @@ class JarvisClient {
               <tbody>
                 ${runs.map(r => `
                   <tr>
-                    <td><strong>${r.workflow_name || r.workflow_id}</strong></td>
+                    <td><strong>${escapeHtml(r.workflow_name || r.workflow_id)}</strong></td>
                     <td>${r.is_dry_run ? 'Dry-Run' : 'Real Execution'}</td>
-                    <td><span class="badge ${r.status === 'COMPLETED' ? 'buy-btn' : 'sell-btn'}">${r.status}</span></td>
+                    <td><span class="badge ${r.status === 'COMPLETED' ? 'buy-btn' : 'sell-btn'}">${escapeHtml(r.status)}</span></td>
                     <td>${Math.round((r.completed_at - r.started_at)*1000)}ms</td>
                   </tr>
                 `).join("")}

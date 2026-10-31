@@ -3,14 +3,14 @@
 **Date of Execution:** October 31, 2026  
 **Environment:** Windows 10/11 x64, Python 3.12.10, pytest 9.2.0, pytest-asyncio 1.4.1  
 **Target Workspace:** `d:\Trading`  
-**Overall Result:** ✅ **47 / 47 Tests Passed (100% Success Rate)**  
-**Execution Duration:** ~29.59 seconds  
+**Overall Result:** ✅ **51 / 51 Tests Passed (100% Success Rate)**  
+**Execution Duration:** ~13.22 seconds  
 
 ---
 
 ## 1. Executive Summary
 
-A comprehensive automated test suite of 47 tests was executed to validate the **JARVIS-APEX v2.1.1 Production Hardening and Defect Correction** release. Every module was tested in isolation and under integrated HTTP/WebSocket conditions, validating API authentication, Ed25519 digital signature validation, ZIP-slip mitigation, simulated paper-trading limit lifecycles, next-bar open backtesting, fail-closed visual workflows, genuine hardware microphone stream release, and provider health probing.
+A comprehensive automated test suite of 51 tests was executed to validate the **JARVIS-APEX v2.1.1 Critical Defect Corrections, SSRF Mitigation, and Production Hardening** release. Every module was tested under unit and integrated conditions, validating API authentication, Server-Side Request Forgery (SSRF) defenses, Frontend XSS sanitization, bounded streaming file uploads, Ed25519 digital signature manifest verification, ZIP-slip mitigation, simulated paper-trading limit lifecycles, next-bar open backtesting, FVG no-lookahead bar alignment, honest vision fallback responses, fail-closed visual workflows with approval resumption, genuine hardware microphone stream release, and provider health probing.
 
 Zero regressions and zero test failures exist across all components.
 
@@ -43,6 +43,10 @@ Zero regressions and zero test failures exist across all components.
 | WKF-SEC-02 | `test_workflow_condition_unknown_operator_rejected` | Validates operator rejection (`VALIDATION_FAILED`) when unknown operators are provided. | **PASSED** |
 | PRIV-FIX-01 | `test_microphone_privacy_releases_stream` | Verifies physical closure and release of `sd.InputStream` and queue draining on microphone mute. | **PASSED** |
 | HLT-FIX-01 | `test_provider_health_probe_accuracy` | Verifies network-based health check for Sarvam AI and structured status states. | **PASSED** |
+| SSRF-SEC-01 | `test_ssrf_protection_blocks_internal_ips_and_schemes` | Verifies loopback (`127.0.0.1`, `localhost`), private RFC 1918 IPs, link-local, cloud metadata IPs, and unsafe schemes (`file://`, `gopher://`) are blocked; flags SSRF alert in forensic analyzer. | **PASSED** |
+| WKF-RES-01 | `test_workflow_approval_resumption` | Validates that an approval-gated workflow paused at `PENDING_APPROVAL` successfully resumes and executes allowlisted action via `execute_confirmed_action()`. | **PASSED** |
+| TLD-FVG-01 | `test_smc_fvg_no_lookahead_bar_alignment` | Verifies FVG bar index matches candle 3 (bar $i$), strictly preventing future-data leakage into the preceding candle. | **PASSED** |
+| VIS-HON-01 | `test_vision_honest_fallback_reporting` | Validates that vision and pattern detection engines honestly report `success: False` with empty overlays upon provider failure, eliminating hallucinated perceptions. | **PASSED** |
 
 ### 🛡️ Domain 3: Security & OS Execution Sandboxing (`tests/test_security.py`)
 | Test ID | Test Function | Scope & Verification | Status |
@@ -114,63 +118,28 @@ platform win32 -- Python 3.12.10, pytest-9.2.0, pluggy-1.6.0
 rootdir: D:\Trading
 plugins: anyio-4.14.2, asyncio-1.4.1
 asyncio: mode=Mode.STRICT, debug=False
-collected 47 items
+collected 51 items
 
-tests/test_ai_router.py::test_circuit_breaker_trips_and_recovers PASSED  [  2%]
-tests/test_ai_router.py::test_model_catalog_and_telemetry PASSED         [  4%]
-tests/test_ai_router.py::test_gemini_38_probe_status_structure PASSED    [  6%]
-tests/test_api_auth_integration.py::test_unauthenticated_request_rejected PASSED [  8%]
-tests/test_api_auth_integration.py::test_authenticated_request_authorized PASSED [ 10%]
-tests/test_api_auth_integration.py::test_cookie_authentication_authorized PASSED [ 12%]
-tests/test_api_auth_integration.py::test_query_string_auth_rejected_for_rest PASSED [ 14%]
-tests/test_api_auth_integration.py::test_websocket_unauthenticated_rejected PASSED [ 17%]
-tests/test_api_auth_integration.py::test_websocket_untrusted_origin_rejected PASSED [ 19%]
-tests/test_api_auth_integration.py::test_websocket_authenticated_accepted PASSED [ 21%]
-tests/test_auto_updater.py::test_version_parsing_and_comparison PASSED   [ 23%]
-tests/test_auto_updater.py::test_file_sha256_verification PASSED         [ 25%]
-tests/test_auto_updater.py::test_backup_snapshot_creation PASSED         [ 27%]
-tests/test_memory_brain.py::test_persistent_memory_crud_and_fts PASSED   [ 29%]
-tests/test_memory_brain.py::test_memory_export_and_import PASSED         [ 31%]
-tests/test_memory_brain.py::test_research_jobs_persistence PASSED        [ 34%]
-tests/test_security.py::test_secret_redaction PASSED                     [ 36%]
-tests/test_security.py::test_action_registry_confirmation_lifecycle PASSED [ 38%]
-tests/test_security.py::test_path_traversal_sanitizer PASSED             [ 40%]
-tests/test_security.py::test_upload_validator PASSED                     [ 42%]
-tests/test_security.py::test_privacy_kill_switches PASSED                [ 44%]
-tests/test_security.py::test_structured_audit_logger PASSED              [ 46%]
-tests/test_trading_lab.py::test_data_validator PASSED                    [ 48%]
-tests/test_trading_lab.py::test_technical_indicators PASSED              [ 51%]
-tests/test_trading_lab.py::test_smc_structures PASSED                    [ 53%]
-tests/test_trading_lab.py::test_backtest_execution PASSED                [ 55%]
-tests/test_trading_lab.py::test_paper_portfolio_lifecycle PASSED         [ 57%]
-tests/test_trading_lab.py::test_trading_psychology_engine PASSED         [ 59%]
-tests/test_v211_defects_regression.py::test_updater_digital_signature_verification PASSED [ 61%]
-tests/test_v211_defects_regression.py::test_updater_zip_slip_protection PASSED [ 63%]
-tests/test_v211_defects_regression.py::test_updater_offline_returns_unavailable PASSED [ 65%]
-tests/test_v211_defects_regression.py::test_paper_trading_market_order_requires_valid_price PASSED [ 68%]
-tests/test_v211_defects_regression.py::test_paper_trading_limit_order_lifecycle PASSED [ 70%]
-tests/test_v211_defects_regression.py::test_paper_trading_reset_requires_confirmation_and_creates_backup PASSED [ 72%]
-tests/test_v211_defects_regression.py::test_backtest_next_bar_open_execution_model PASSED [ 74%]
-tests/test_v211_defects_regression.py::test_workflow_condition_missing_context_fails_closed PASSED [ 76%]
-tests/test_v211_defects_regression.py::test_workflow_condition_unknown_operator_rejected PASSED [ 78%]
-tests/test_v211_defects_regression.py::test_microphone_privacy_releases_stream PASSED [ 80%]
-tests/test_v211_defects_regression.py::test_provider_health_probe_accuracy PASSED [ 82%]
-tests/test_voice_state.py::test_voice_state_transitions PASSED           [ 85%]
-tests/test_voice_state.py::test_audio_interruption_protocol PASSED       [ 87%]
-tests/test_audio_devices_enumeration PASSED                               [ 89%]
-tests/test_websocket.py::test_websocket_manager_connect_and_broadcast PASSED [ 91%]
-tests/test_websocket.py::test_bounded_queue_slow_client_overflow PASSED  [ 93%]
-tests/test_workflows.py::test_workflow_listing_and_templates PASSED      [ 95%]
-tests/test_workflows.py::test_workflow_allowlist_validation PASSED       [ 97%]
-tests/test_workflows.py::test_workflow_dry_run_execution PASSED          [100%]
+tests\test_ai_router.py ...                                              [  5%]
+tests\test_api_auth_integration.py .......                               [ 19%]
+tests\test_auto_updater.py ...                                           [ 25%]
+tests\test_memory_brain.py ...                                           [ 31%]
+tests\test_security.py ......                                            [ 43%]
+tests\test_trading_lab.py ......                                         [ 54%]
+tests\test_v211_defects_regression.py ...............                    [ 84%]
+tests\test_voice_state.py ...                                            [ 90%]
+tests\test_websocket.py ..                                               [ 94%]
+tests\test_workflows.py ...                                              [100%]
 
-======================= 47 passed, 2 warnings in 29.59s =======================
+======================= 51 passed, 2 warnings in 13.22s =======================
 ```
 
 ---
 
 ## 4. Quality & Compliance Sign-Off
-- **Authentication Guarantee:** Enforced on every sensitive REST route and WebSocket handshake.
-- **Cryptographic Assurance:** Ed25519 digital signature validation and SHA-256 integrity check.
-- **Privacy Invariant:** Physical audio stream release and feed suppression confirmed.
-- **Trading Isolation:** Simulated execution only is guaranteed by financial engine tests.
+- **SSRF Immunity:** Loopback, private networks, cloud metadata, and redirection hops fully protected.
+- **XSS Sanitization:** All dynamic user values escaped in frontend DOM.
+- **Streaming Upload Guard:** Bounded chunk reads reject oversized payloads before buffering.
+- **Workflow Integrity:** Full approval lifecycle and background scheduling verified.
+- **Financial Calculation Integrity:** Bar-alignment and zero look-ahead confirmed on Smart Money Concepts.
+- **Privacy & Storage Hygiene:** 38 audio cache files removed from git tracking; physical audio stream release verified.

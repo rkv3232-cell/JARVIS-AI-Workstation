@@ -20,16 +20,20 @@ def build_executable():
     try:
         import PyInstaller
     except ImportError:
-        print("[Build Notice] PyInstaller is not currently installed. To bundle into a single EXE, run:")
+        print("[Build Notice] PyInstaller is not currently installed. To bundle into an EXE, run:")
         print("  pip install pyinstaller")
-        print("  python scripts/build_windows_app.py")
-        return
+        print("  python scripts/build_windows_app.py [--onedir | --onefile]")
+        sys.exit(1)
+
+    # Detect package mode flag (--onefile vs --onedir)
+    mode_flag = "--onefile" if "--onefile" in sys.argv else "--onedir"
+    print(f"[Packaging Mode] Building with: {mode_flag}")
 
     pyinstaller_cmd = [
         sys.executable, "-m", "PyInstaller",
         "--name=JARVIS_APEX",
         "--noconsole",
-        "--onedir",
+        mode_flag,
         f"--add-data={BASE_DIR / 'frontend'};frontend",
         f"--add-data={BASE_DIR / 'data'};data",
         "--hidden-import=uvicorn.logging",
@@ -50,9 +54,10 @@ def build_executable():
     print(f"Running PyInstaller command: {' '.join(pyinstaller_cmd)}")
     res = subprocess.run(pyinstaller_cmd, cwd=str(BASE_DIR))
     if res.returncode == 0:
-        print("\nBuild successful! Binary output generated in dist/JARVIS_APEX/")
+        print(f"\nBuild successful! Output generated in dist/JARVIS_APEX/ ({mode_flag})")
     else:
         print(f"\nBuild failed with exit code {res.returncode}")
+    sys.exit(res.returncode)
 
 if __name__ == "__main__":
     build_executable()

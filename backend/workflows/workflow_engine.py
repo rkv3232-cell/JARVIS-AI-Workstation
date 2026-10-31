@@ -182,12 +182,12 @@ class WorkflowEngine:
         if action not in ALLOWLISTED_ACTIONS:
             return {"success": False, "error": f"Action '{action}' is not in allowlist: {sorted(ALLOWLISTED_ACTIONS)}"}
 
-        wf_id = f"wf_{uuid.uuid4().hex[:10]}"
+        wf_id = data.get("id") or f"wf_{uuid.uuid4().hex[:10]}"
         now = time.time()
         with sqlite3.connect(str(DB_PATH)) as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO workflows (id, name, description, trigger_type, trigger_config, condition_config, action_type, action_params, requires_approval, is_enabled, created_at, updated_at)
+                INSERT OR REPLACE INTO workflows (id, name, description, trigger_type, trigger_config, condition_config, action_type, action_params, requires_approval, is_enabled, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """, (
                 wf_id,
@@ -231,7 +231,7 @@ class WorkflowEngine:
         """
         wf = cls.get_workflow(wf_id)
         if not wf:
-            return {"success": False, "error": f"Workflow {wf_id} not found."}
+            return {"success": False, "status": "NOT_FOUND", "error": f"Workflow {wf_id} not found."}
 
         run_id = f"run_{uuid.uuid4().hex[:10]}"
         t_start = time.time()
@@ -368,24 +368,7 @@ class WorkflowEngine:
                 "message": f"[Dry-Run] Action '{action_type}' would execute with params: {action_params}"
             }
         else:
-            try:
-                # Dispatch allowlisted action
-                if action_type == "send_notification":
-                    action_result = {"status": "dispatched", "notification": action_params}
-                elif action_type == "speak_voice_message":
-                    action_result = {"status": "spoken", "text": action_params.get("text")}
-                elif action_type == "run_market_scan":
-                    from ..trading_scanner import scan_market
-                    signals = await scan_market(settings.DEFAULT_SYMBOLS)
-                    action_result = {"status": "scanned", "signal_count": len(signals)}
-                elif action_type == "backup_memory":
-                    from ..memory.memory_brain import PersistentMemoryBrain
-                    backup = PersistentMemoryBrain.export_all_memories()
-                    action_result = {"status": "backed_up", "total": backup["total_memories"]}
-                else:
-                    action_result = {"status": "executed", "action": action_type}
-            except Exception as e:
-                action_result = {"status": "failed", "error": str(e)}
+            action_result = await cls._dispatch_action(action_type, action_params)
 
         step_trace.append({
             "step": "ACTION",
@@ -408,12 +391,121 @@ class WorkflowEngine:
         }
 
     @classmethod
+    async def _dispatch_action(cls, action_type: str, action_params: Dict[str, Any]) -> Dict[str, Any]:
+        """Dispatches an allowlisted action to the appropriate subsystem."""
+        try:
+            if action_type == "send_notification":
+                from ..websocket_manager import ws_manager
+                title = action_params.get("title", "J.A.R.V.I.S. Notification")
+                message = action_params.get("message", "")
+                await ws_manager.broadcast(
+                    "workflow_notification",
+                    {"title": title, "message": message, "timestamp": time.time()}
+                )
+                return {"status": "dispatched", "notification": {"title": title, "message": message}}
+
+            elif action_type == "speak_voice_message":
+                text = action_params.get("text", "")
+                if text:
+                    from ..voice_service import generate_speech_file
+                    from ..websocket_manager import ws_manager
+                    audio_path = await generate_speech_file(text, filename=f"wf_voice_{int(time.time()*1000)}.mp3")
+                    if audio_path:
+                        await ws_manager.broadcast(
+                            "chat_audio",
+                            {"audio_url": audio_path, "text": text}
+                        )
+                return {"status": "spoken", "text": text}
+
+            elif action_type == "run_market_scan":
+                from ..trading_scanner import scan_market
+                from ..websocket_manager import ws_manager
+                signals = await scan_market(settings.DEFAULT_SYMBOLS)
+                await ws_manager.broadcast("trade_alert", signals)
+                return {"status": "scanned", "signal_count": len(signals)}
+
+            elif action_type == "backup_memory":
+                from ..memory.memory_brain import PersistentMemoryBrain
+                backup = PersistentMemoryBrain.export_all_memories()
+                return {"status": "backed_up", "total": backup["total_memories"], "path": backup["file_path"]}
+
+            elif action_type == "open_url":
+                import webbrowser
+                url = action_params.get("url", "")
+                if url.startswith("http://") or url.startswith("https://"):
+                    webbrowser.open(url)
+                    return {"status": "opened_url", "url": url}
+                return {"status": "rejected", "error": "Invalid URL scheme"}
+
+            elif action_type == "set_system_theme":
+                from ..os_controller import set_windows_theme
+                dark = action_params.get("dark_mode", True)
+                res = set_windows_theme(dark)
+                return {"status": "theme_set", "dark_mode": dark, "result": res}
+
+            elif action_type == "create_trade_journal":
+                from ..database import save_trading_journal_entry
+                res = save_trading_journal_entry(
+                    title=action_params.get("title", "Automated Workflow Journal"),
+                    symbol=action_params.get("symbol", "NIFTY50"),
+                    outcome=action_params.get("outcome", "NOTE"),
+                    notes=action_params.get("notes", "Triggered by workflow automation"),
+                    psychology_tags=["Disciplined", "Automated"],
+                    pnl=float(action_params.get("pnl", 0.0))
+                )
+                return {"status": "journal_created", "entry": res}
+
+            else:
+                return {"status": "executed", "action": action_type}
+
+        except Exception as e:
+            return {"status": "failed", "error": str(e)}
+
+    @classmethod
+    async def resume_confirmed_workflow(cls, wf_id: str, run_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Resumes and executes a workflow that was previously held in PENDING_APPROVAL state,
+        after explicit user confirmation.
+        """
+        wf = cls.get_workflow(wf_id)
+        if not wf:
+            return {"success": False, "status": "NOT_FOUND", "error": f"Workflow {wf_id} not found."}
+
+        action_type = wf["action_type"]
+        action_params = wf["action_params"]
+        run_id = run_id or f"run_resumed_{uuid.uuid4().hex[:8]}"
+        t_start = time.time()
+
+        action_result = await cls._dispatch_action(action_type, action_params)
+        status_str = "COMPLETED" if action_result.get("status") != "failed" else "FAILED"
+
+        step_trace = [{
+            "step": "RESUMED_ACTION",
+            "action_type": action_type,
+            "result": action_result,
+            "timestamp": time.time(),
+            "approved": True
+        }]
+
+        cls._record_run(run_id, wf_id, False, status_str, step_trace, t_start)
+        log_audit_event("resume_workflow", f"{wf['name']} ({status_str})", "high", status_str)
+
+        return {
+            "success": status_str == "COMPLETED",
+            "workflow_id": wf_id,
+            "run_id": run_id,
+            "status": status_str,
+            "action_result": action_result,
+            "message": f"Workflow '{wf['name']}' resumed and executed successfully."
+        }
+
+    @classmethod
     def _record_run(cls, run_id: str, wf_id: str, is_dry_run: bool, status: str, trace: List[Dict], t_start: float):
         now = time.time()
         with sqlite3.connect(str(DB_PATH)) as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO workflow_runs (run_id, workflow_id, is_dry_run, status, step_results, started_at, completed_at)
+                INSERT OR REPLACE INTO workflow_runs (run_id, workflow_id, is_dry_run, status, step_results, started_at, completed_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?);
             """, (run_id, wf_id, 1 if is_dry_run else 0, status, json.dumps(trace, ensure_ascii=False), t_start, now))
             conn.commit()
@@ -440,4 +532,67 @@ class WorkflowEngine:
                 d["step_results"] = []
             results.append(d)
         return results
+
+class WorkflowScheduler:
+    """
+    Background asynchronous scheduler for time-based and recurring workflows.
+    Evaluates enabled schedule triggers and dispatches runs.
+    """
+    def __init__(self):
+        self._running = False
+        self._task: Optional[asyncio.Task] = None
+        self._last_executed_minute: Dict[str, str] = {}
+
+    def start(self):
+        if not self._running:
+            self._running = True
+            try:
+                loop = asyncio.get_running_loop()
+                self._task = loop.create_task(self._loop())
+            except RuntimeError:
+                pass
+
+    def stop(self):
+        self._running = False
+        if self._task and not self._task.done():
+            self._task.cancel()
+
+    async def _loop(self):
+        while self._running:
+            try:
+                now_struct = time.localtime()
+                current_time_str = f"{now_struct.tm_hour:02d}:{now_struct.tm_min:02d}"
+                date_key = f"{now_struct.tm_year}-{now_struct.tm_mon:02d}-{now_struct.tm_mday:02d}"
+
+                workflows = WorkflowEngine.list_workflows()
+                for wf in workflows:
+                    if not wf.get("is_enabled"):
+                        continue
+
+                    trig_type = wf.get("trigger_type")
+                    trig_conf = wf.get("trigger_config") or {}
+                    wf_id = wf["id"]
+
+                    if trig_type == "schedule":
+                        sched_time = trig_conf.get("time")  # e.g. "15:30"
+                        if sched_time and sched_time == current_time_str:
+                            exec_key = f"{wf_id}_{date_key}_{current_time_str}"
+                            if self._last_executed_minute.get(wf_id) != exec_key:
+                                self._last_executed_minute[wf_id] = exec_key
+                                asyncio.create_task(
+                                    WorkflowEngine.run_workflow(
+                                        wf_id,
+                                        is_dry_run=False,
+                                        context={"trigger": "schedule", "time": current_time_str}
+                                    )
+                                )
+
+                await asyncio.sleep(15)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                print(f"[WorkflowScheduler] Execution loop notice: {e}")
+                await asyncio.sleep(15)
+
+workflow_scheduler = WorkflowScheduler()
 

@@ -134,8 +134,8 @@ def detect_smc_structures(candles: List[Dict[str, Any]]) -> Dict[str, List[Dict[
             if gap_pct >= 0.15:  # meaningful imbalance
                 fvgs.append({
                     "type": "BULLISH_FVG",
-                    "bar_index": i - 1,
-                    "time": c1["time"],
+                    "bar_index": i,
+                    "time": c2["time"],
                     "top": c2["low"],
                     "bottom": c0["high"],
                     "gap_size": gap_size,
@@ -149,8 +149,8 @@ def detect_smc_structures(candles: List[Dict[str, Any]]) -> Dict[str, List[Dict[
             if gap_pct >= 0.15:
                 fvgs.append({
                     "type": "BEARISH_FVG",
-                    "bar_index": i - 1,
-                    "time": c1["time"],
+                    "bar_index": i,
+                    "time": c2["time"],
                     "top": c0["low"],
                     "bottom": c2["high"],
                     "gap_size": gap_size,
