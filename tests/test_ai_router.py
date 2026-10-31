@@ -52,3 +52,4 @@ def test_gemini_38_probe_status_structure():
     assert "is_available" in status
     assert "active_key_label" in status
     assert "key_details" in status
+

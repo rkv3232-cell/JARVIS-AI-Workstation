@@ -45,3 +45,4 @@ async def test_workflow_dry_run_execution():
     assert "TRIGGER" in steps
     assert "CONDITION" in steps
     assert "ACTION" in steps
+

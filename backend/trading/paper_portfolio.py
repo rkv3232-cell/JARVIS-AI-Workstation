@@ -255,3 +255,4 @@ class PaperTradingPortfolio:
             conn.commit()
         log_audit_event("reset_paper_account", f"Capital: {initial_capital}", "high", "success")
         return {"success": True, "message": f"पेपर ट्रेडिंग अकाउंट ₹{initial_capital:,.2f} पर रीसेट कर दिया गया है।"}
+

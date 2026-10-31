@@ -36,3 +36,4 @@ def test_backup_snapshot_creation():
             snap.unlink()
         except Exception:
             pass
+

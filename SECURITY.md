@@ -111,3 +111,4 @@ Every operation executed by J.A.R.V.I.S. is logged to `data/audit_log.json`:
 - **Upload Size Limit:** Capped at 25 MB (`settings.MAX_UPLOAD_SIZE_BYTES`).
 - **Extension Allowlist:** Only audio (`.wav`, `.mp3`, `.m4a`, `.ogg`), images (`.png`, `.jpg`, `.jpeg`, `.webp`), documents (`.pdf`, `.txt`, `.json`, `.csv`) are allowed.
 - **Path Sanitization:** Filenames containing `..`, `/`, `\`, or null bytes are rejected. All file access inside workspaces uses `sanitize_safe_path()` to ensure operations remain within intended directories.
+

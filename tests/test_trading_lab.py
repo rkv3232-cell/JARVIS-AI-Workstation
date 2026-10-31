@@ -138,3 +138,4 @@ def test_trading_psychology_engine():
 
     analytics = TradingPsychologyEngine.get_psychology_analytics()
     assert analytics["total_entries"] >= 2
+

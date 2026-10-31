@@ -449,3 +449,4 @@ class StrategyLabBacktester:
             "trades": trades,
             "equity_curve": equity_curve
         }
+

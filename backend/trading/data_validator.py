@@ -93,3 +93,4 @@ class MarketDataValidator:
             "warnings": warnings[:20],
             "clean_candles": clean_candles
         }
+

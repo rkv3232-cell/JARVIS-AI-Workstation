@@ -97,3 +97,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Voice synthesis and local wake-word listener.
 - Screen vision and OCR capture tools.
 - Initial trading scanner and PDF research engine.
+

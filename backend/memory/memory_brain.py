@@ -419,3 +419,4 @@ class PersistentMemoryBrain:
             cursor = conn.cursor()
             cursor.execute("SELECT job_id, topic, mode, status, progress, current_step, error, created_at, updated_at FROM research_jobs ORDER BY created_at DESC LIMIT ?;", (limit,))
             return [dict(r) for r in cursor.fetchall()]
+

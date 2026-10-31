@@ -44,3 +44,4 @@ async def test_bounded_queue_slow_client_overflow():
     ok_overflow = await client.enqueue_message("msg_overflow")
     assert ok_overflow is True
     assert client.queue.qsize() == 3
+

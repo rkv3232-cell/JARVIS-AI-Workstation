@@ -248,3 +248,4 @@ async def get_system_diagnostics_report() -> Dict[str, Any]:
             "entries": recent_errors[-10:]
         }
     }
+

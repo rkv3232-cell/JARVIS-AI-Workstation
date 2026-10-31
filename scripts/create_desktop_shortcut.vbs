@@ -11,3 +11,4 @@ oLink.WindowStyle = 1
 oLink.Save
 
 WScript.Echo "J.A.R.V.I.S. Desktop shortcut created successfully on your Desktop."
+

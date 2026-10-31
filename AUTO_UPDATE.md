@@ -122,3 +122,4 @@ The updater is fully accessible through the FastAPI backend:
 - `GET /api/system/version`: Returns current version, latest available version, and update status.
 - `POST /api/system/update/check`: Forces an immediate remote manifest query.
 - `POST /api/system/update/apply`: Initiates the staging download, SHA-256 verification, and backup snapshot creation.
+

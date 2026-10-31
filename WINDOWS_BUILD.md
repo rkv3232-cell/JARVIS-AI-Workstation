@@ -123,3 +123,4 @@ For production deployment across multiple machines, sign the binary with a stand
 ```powershell
 signtool sign /f MyCert.pfx /p "password" /tr http://timestamp.digicert.com /td sha256 /fd sha256 dist\JARVIS-APEX\JARVIS-APEX.exe
 ```
+

@@ -210,3 +210,4 @@ JARVIS-AI-Workstation/
 
 ## ⚖️ Safety & Compliance Notice
 This software is developed strictly for personal automation, quantitative research, and educational simulation. Real-money automated order execution is intentionally disabled. High-impact operating system commands require explicit manual confirmation.
+

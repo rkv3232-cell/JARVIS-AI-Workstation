@@ -64,3 +64,4 @@ def test_research_jobs_persistence():
     updated_job = PersistentMemoryBrain.get_research_job(job_id)
     assert updated_job["progress"] == 50
     assert updated_job["status"] == "RUNNING"
+

@@ -132,3 +132,4 @@ tests/test_workflows.py::test_workflow_dry_run_execution PASSED          [100%]
 - **Safety Invariant:** Action confirmation requirement is guaranteed by tests `SEC-02` and `WKF-02`.
 - **Trading Isolation:** Simulated execution only is guaranteed by tests `TLD-04` and `TLD-05`.
 - **Privacy Assurance:** Zero API keys or secrets in logs confirmed by test `SEC-01`.
+

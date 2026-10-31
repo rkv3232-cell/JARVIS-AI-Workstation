@@ -172,3 +172,4 @@ This places a "JARVIS-APEX" shortcut directly on your Windows Desktop pointing t
 | **Mic not detecting speech** | Hardware Privacy Kill Switch active. | Check the UI header toggle. Ensure "Mic" is active (green). |
 | **AI requests failing** | API keys missing or quota exceeded. | Check keys in `.env` or verify the Circuit Breaker status in the **Health Center** tab. |
 | **Action Confirmation prompt appears** | High-impact action triggered (kill app, empty bin). | This is an intentional security gate. Review details in the modal and click "Confirm Action". |
+

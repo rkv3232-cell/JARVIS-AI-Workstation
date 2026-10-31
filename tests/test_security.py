@@ -104,3 +104,4 @@ def test_structured_audit_logger():
     latest = logs[0]
     assert latest["action_type"] == "test_audit_action"
     assert latest["approved_by"] == "pytest"
+

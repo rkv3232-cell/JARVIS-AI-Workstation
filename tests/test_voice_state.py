@@ -37,3 +37,4 @@ def test_audio_devices_enumeration():
     assert devs["success"] is True
     assert isinstance(devs["inputs"], list)
     assert isinstance(devs["outputs"], list)
+

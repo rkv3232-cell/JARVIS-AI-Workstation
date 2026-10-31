@@ -119,3 +119,4 @@ class SecureAutoUpdater:
         except Exception as e:
             log_audit_event("rollback_update", str(snapshot_path), "high", "failed", error=str(e))
             return False
+
