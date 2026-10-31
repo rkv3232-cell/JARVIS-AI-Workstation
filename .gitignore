@@ -1,0 +1,41 @@
+# Secrets & Credentials (DO NOT COMMIT)
+.env
+*.env.local
+*.key
+*.pem
+serviceAccountKey.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+
+# Databases & Runtime State
+*.db
+*.sqlite3
+jarvis_memory.db
+chat.txt
+
+# Scratch & Temporary Test Artifacts
+scratch/
+scratch_*
+*.tmp
+*.log
+
+# Generated Reports (Runtime output)
+frontend/reports/*.pdf
+frontend/reports/*.html
+*.pdf
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.gemini/
