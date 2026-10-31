@@ -72,10 +72,12 @@ class LocalWakeWordListener:
     and speaks back natively through PC speakers.
     """
     def __init__(self, broadcast_callback: Optional[Callable] = None, loop: Optional[asyncio.AbstractEventLoop] = None):
+        self._lock = threading.Lock()
         self.broadcast_callback = broadcast_callback
         self.loop = loop
         self.is_running = False
         self.thread: Optional[threading.Thread] = None
+        self.stream: Optional[Any] = None
         self.model: Optional[OWWModel] = None
         
         # Audio stream settings
@@ -105,32 +107,63 @@ class LocalWakeWordListener:
             return False
 
     def start(self, loop: Optional[asyncio.AbstractEventLoop] = None):
-        """Starts the background listening thread."""
-        if loop:
-            self.loop = loop
-        elif not self.loop:
-            try:
-                self.loop = asyncio.get_running_loop()
-            except RuntimeError:
-                pass
+        """Starts the background listening thread safely, preventing duplicates."""
+        with self._lock:
+            if loop:
+                self.loop = loop
+            elif not self.loop:
+                try:
+                    self.loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    pass
 
-        if self.is_running:
-            return
-        if not self.model:
-            if not self.load_model():
+            if self.is_running:
                 return
 
-        self.is_running = True
-        self.thread = threading.Thread(target=self._run_listener_loop, daemon=True, name="JarvisWakeListener")
-        self.thread.start()
-        print("[LocalWakeListener] Autonomous PC Background Listener is ACTIVE (Listening for 'Hey Jarvis').")
+            if not self.model:
+                if not self.load_model():
+                    return
+
+            self.is_running = True
+            self.thread = threading.Thread(target=self._run_listener_loop, daemon=True, name="JarvisWakeListener")
+            self.thread.start()
+            print("[LocalWakeListener] Autonomous PC Background Listener is ACTIVE (Listening for 'Hey Jarvis').")
 
     def stop(self):
-        """Stops the background listening thread."""
-        self.is_running = False
-        if self.thread and self.thread.is_alive():
-            self.thread.join(timeout=1.0)
-        print("[LocalWakeListener] Background Listener stopped.")
+        """
+        Stops the background listening thread and immediately closes the active microphone stream.
+        Drains all queued audio chunks to ensure no audio is retained.
+        """
+        with self._lock:
+            self.is_running = False
+
+            # Explicitly stop and close the sounddevice stream handle
+            if self.stream is not None:
+                try:
+                    self.stream.stop()
+                    self.stream.close()
+                except Exception as e:
+                    print(f"[LocalWakeListener] Notice closing stream: {e}")
+                finally:
+                    self.stream = None
+
+            # Drain queue immediately
+            while not self.audio_queue.empty():
+                try:
+                    self.audio_queue.get_nowait()
+                except Exception:
+                    break
+
+            # Join listener thread
+            if self.thread and self.thread.is_alive():
+                self.thread.join(timeout=1.5)
+                self.thread = None
+
+            print("[LocalWakeListener] Background Listener stopped. Microphone stream closed.")
+
+    def is_stream_open(self) -> bool:
+        """Returns True if the microphone stream is currently held open."""
+        return self.is_running and self.stream is not None
 
     def _broadcast(self, event: str, payload: dict):
         """Safely pushes events to connected dashboard WebSocket clients if callback is set."""
@@ -144,6 +177,7 @@ class LocalWakeWordListener:
         """Main audio processing loop running in background thread using PortAudio callback."""
         if not sd:
             print("[LocalWakeListener] sounddevice is missing. Cannot open microphone stream.")
+            self.is_running = False
             return
 
         def _audio_callback(indata, frames, time_info, status):
@@ -158,26 +192,30 @@ class LocalWakeWordListener:
                         pass
 
         try:
-            with sd.InputStream(
+            stream = sd.InputStream(
                 samplerate=self.sample_rate,
                 channels=1,
                 dtype="int16",
                 blocksize=self.chunk_size,
                 callback=_audio_callback
-            ):
-                while self.is_running:
-                    try:
-                        chunk = self.audio_queue.get(timeout=0.2)
-                    except queue.Empty:
-                        continue
+            )
+            self.stream = stream
+            stream.start()
 
-                    flat_chunk = chunk.flatten()
+            while self.is_running:
+                try:
+                    chunk = self.audio_queue.get(timeout=0.2)
+                except queue.Empty:
+                    continue
 
-                    if self.is_capturing_command or self.is_processing:
-                        time.sleep(0.01)
-                        continue
+                flat_chunk = chunk.flatten()
 
-                    # 1. Run local prediction on current audio chunk
+                if self.is_capturing_command or self.is_processing:
+                    time.sleep(0.01)
+                    continue
+
+                # 1. Run local prediction on current audio chunk
+                if self.model:
                     prediction = self.model.predict(flat_chunk)
                     score = prediction.get("hey_jarvis", 0.0)
 
@@ -187,6 +225,21 @@ class LocalWakeWordListener:
 
         except Exception as e:
             print(f"[LocalWakeListener] Audio stream exception: {e}")
+        finally:
+            if self.stream is not None:
+                try:
+                    self.stream.stop()
+                    self.stream.close()
+                except Exception:
+                    pass
+                self.stream = None
+            # Drain queue
+            while not self.audio_queue.empty():
+                try:
+                    self.audio_queue.get_nowait()
+                except Exception:
+                    break
+            self.is_running = False
 
     def _handle_wake_event(self):
         """Invoked when 'Hey Jarvis' is detected."""
@@ -345,6 +398,10 @@ def stop_local_wake_listener():
     if _GLOBAL_LISTENER:
         _GLOBAL_LISTENER.stop()
         _GLOBAL_LISTENER = None
+
+def is_wake_listener_running() -> bool:
+    global _GLOBAL_LISTENER
+    return _GLOBAL_LISTENER is not None and _GLOBAL_LISTENER.is_stream_open()
 
 if __name__ == "__main__":
     print("=================================================================")

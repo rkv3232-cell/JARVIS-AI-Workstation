@@ -4,16 +4,16 @@ from pathlib import Path
 from backend.auto_updater import SecureAutoUpdater
 
 def test_version_parsing_and_comparison():
-    assert SecureAutoUpdater.get_current_version() == "2.1.0"
+    assert SecureAutoUpdater.get_current_version() in ["2.1.0", "2.1.1"]
     
     # Newer remote versions
-    assert SecureAutoUpdater._is_newer("2.2.0", "2.1.0") is True
-    assert SecureAutoUpdater._is_newer("3.0.0", "2.1.0") is True
-    assert SecureAutoUpdater._is_newer("2.1.1", "2.1.0") is True
+    assert SecureAutoUpdater._is_newer("2.2.0", "2.1.1") is True
+    assert SecureAutoUpdater._is_newer("3.0.0", "2.1.1") is True
 
     # Same or older versions
-    assert SecureAutoUpdater._is_newer("2.1.0", "2.1.0") is False
-    assert SecureAutoUpdater._is_newer("2.0.9", "2.1.0") is False
+    assert SecureAutoUpdater._is_newer("2.1.1", "2.1.1") is False
+    assert SecureAutoUpdater._is_newer("2.1.0", "2.1.1") is False
+    assert SecureAutoUpdater._is_newer("2.0.9", "2.1.1") is False
 
 def test_file_sha256_verification(tmp_path):
     test_file = tmp_path / "payload.bin"

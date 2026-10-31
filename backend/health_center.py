@@ -29,9 +29,12 @@ def record_system_error(module: str, error_message: str):
 async def check_ai_provider_latencies() -> Dict[str, Dict[str, Any]]:
     """
     Probes connectivity and measures latency for all configured AI providers.
-    Uses fast HEAD/GET requests or lightweight calls with strict 2.5s timeouts.
+    Explicitly distinguishes CONFIGURED, REACHABLE, AUTHENTICATED, DEGRADED, and UNAVAILABLE states.
+    Includes verified timestamps and provider response details.
     """
     results = {}
+    verified_ts = time.time()
+    verified_iso = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(verified_ts))
 
     # 1. Google Gemini Multi-Key Pool
     gemini_keys = settings.gemini_keys_pool
@@ -44,16 +47,41 @@ async def check_ai_provider_latencies() -> Dict[str, Dict[str, Any]]:
                     timeout=2.5
                 )
                 latency = round((time.perf_counter() - t0) * 1000, 1)
+                is_auth = (res.status_code == 200)
+                state = "AUTHENTICATED" if is_auth else ("DEGRADED" if res.status_code == 429 else "UNAUTHENTICATED")
                 results["Google Gemini"] = {
-                    "status": "ONLINE" if res.status_code == 200 else f"HTTP_{res.status_code}",
+                    "state": state,
+                    "status": "ONLINE" if is_auth else f"HTTP_{res.status_code}",
+                    "reachable": True,
+                    "authenticated": is_auth,
+                    "response_code": res.status_code,
                     "latency_ms": latency,
                     "keys_configured": len(gemini_keys),
-                    "active_key": f"{gemini_keys[0][:4]}...{gemini_keys[0][-4:]}"
+                    "active_key": f"{gemini_keys[0][:4]}...{gemini_keys[0][-4:]}",
+                    "verified_at": verified_ts,
+                    "verified_iso": verified_iso
                 }
         except Exception as e:
-            results["Google Gemini"] = {"status": "OFFLINE", "latency_ms": None, "error": str(e)[:60]}
+            results["Google Gemini"] = {
+                "state": "UNAVAILABLE",
+                "status": "OFFLINE",
+                "reachable": False,
+                "authenticated": False,
+                "latency_ms": None,
+                "error": str(e)[:80],
+                "verified_at": verified_ts,
+                "verified_iso": verified_iso
+            }
     else:
-        results["Google Gemini"] = {"status": "NOT_CONFIGURED", "latency_ms": None}
+        results["Google Gemini"] = {
+            "state": "NOT_CONFIGURED",
+            "status": "NOT_CONFIGURED",
+            "reachable": False,
+            "authenticated": False,
+            "latency_ms": None,
+            "verified_at": verified_ts,
+            "verified_iso": verified_iso
+        }
 
     # 2. Groq LPU
     if settings.GROQ_API_KEY:
@@ -66,57 +94,163 @@ async def check_ai_provider_latencies() -> Dict[str, Dict[str, Any]]:
                     timeout=2.5
                 )
                 latency = round((time.perf_counter() - t0) * 1000, 1)
+                is_auth = (res.status_code == 200)
+                state = "AUTHENTICATED" if is_auth else ("DEGRADED" if res.status_code == 429 else "UNAUTHENTICATED")
                 results["Groq LPU"] = {
-                    "status": "ONLINE" if res.status_code == 200 else f"HTTP_{res.status_code}",
-                    "latency_ms": latency
+                    "state": state,
+                    "status": "ONLINE" if is_auth else f"HTTP_{res.status_code}",
+                    "reachable": True,
+                    "authenticated": is_auth,
+                    "response_code": res.status_code,
+                    "latency_ms": latency,
+                    "verified_at": verified_ts,
+                    "verified_iso": verified_iso
                 }
         except Exception as e:
-            results["Groq LPU"] = {"status": "OFFLINE", "latency_ms": None, "error": str(e)[:60]}
+            results["Groq LPU"] = {
+                "state": "UNAVAILABLE",
+                "status": "OFFLINE",
+                "reachable": False,
+                "authenticated": False,
+                "latency_ms": None,
+                "error": str(e)[:80],
+                "verified_at": verified_ts,
+                "verified_iso": verified_iso
+            }
     else:
-        results["Groq LPU"] = {"status": "NOT_CONFIGURED", "latency_ms": None}
+        results["Groq LPU"] = {
+            "state": "NOT_CONFIGURED",
+            "status": "NOT_CONFIGURED",
+            "reachable": False,
+            "authenticated": False,
+            "latency_ms": None,
+            "verified_at": verified_ts,
+            "verified_iso": verified_iso
+        }
 
-    # 3. OpenRouter
+    # 3. OpenRouter (Separate Reachability vs Authentication Probing)
     if settings.OPENROUTER_API_KEY:
         t0 = time.perf_counter()
         try:
             async with httpx.AsyncClient(timeout=2.5) as client:
-                res = await client.get("https://openrouter.ai/api/v1/models", timeout=2.5)
+                # OpenRouter official key check endpoint
+                res = await client.get(
+                    "https://openrouter.ai/api/v1/auth/key",
+                    headers={"Authorization": f"Bearer {settings.OPENROUTER_API_KEY}"},
+                    timeout=2.5
+                )
                 latency = round((time.perf_counter() - t0) * 1000, 1)
+                is_auth = (res.status_code == 200)
+                state = "AUTHENTICATED" if is_auth else ("UNAUTHENTICATED" if res.status_code in [401, 403] else f"HTTP_{res.status_code}")
                 results["OpenRouter"] = {
-                    "status": "ONLINE" if res.status_code == 200 else f"HTTP_{res.status_code}",
-                    "latency_ms": latency
+                    "state": state,
+                    "status": "ONLINE" if is_auth else f"HTTP_{res.status_code}",
+                    "reachable": True,
+                    "authenticated": is_auth,
+                    "response_code": res.status_code,
+                    "latency_ms": latency,
+                    "verified_at": verified_ts,
+                    "verified_iso": verified_iso
                 }
         except Exception as e:
-            results["OpenRouter"] = {"status": "OFFLINE", "latency_ms": None, "error": str(e)[:60]}
+            results["OpenRouter"] = {
+                "state": "UNAVAILABLE",
+                "status": "OFFLINE",
+                "reachable": False,
+                "authenticated": False,
+                "latency_ms": None,
+                "error": str(e)[:80],
+                "verified_at": verified_ts,
+                "verified_iso": verified_iso
+            }
     else:
-        results["OpenRouter"] = {"status": "NOT_CONFIGURED", "latency_ms": None}
-
-    # 4. Sarvam AI
-    if settings.SARVAM_API_KEY:
-        results["Sarvam AI"] = {
-            "status": "ONLINE",
-            "speaker": settings.SARVAM_SPEAKER,
-            "model": settings.SARVAM_MODEL
+        results["OpenRouter"] = {
+            "state": "NOT_CONFIGURED",
+            "status": "NOT_CONFIGURED",
+            "reachable": False,
+            "authenticated": False,
+            "latency_ms": None,
+            "verified_at": verified_ts,
+            "verified_iso": verified_iso
         }
-    else:
-        results["Sarvam AI"] = {"status": "NOT_CONFIGURED", "latency_ms": None}
 
-    # 5. Ollama (Local Private LLM)
+    # 4. Sarvam AI (Actual Probe: Not ONLINE solely because an API key exists)
+    if settings.SARVAM_API_KEY:
+        t0 = time.perf_counter()
+        try:
+            async with httpx.AsyncClient(timeout=2.5) as client:
+                # Query Sarvam API with subscription key header to verify reachable & authenticated
+                res = await client.get(
+                    "https://api.sarvam.ai/speech-to-text",
+                    headers={"api-subscription-key": settings.SARVAM_API_KEY},
+                    timeout=2.5
+                )
+                latency = round((time.perf_counter() - t0) * 1000, 1)
+                # 200 or 405 (Method Not Allowed on GET) indicates reachable host and valid gateway
+                is_auth = (res.status_code in [200, 405, 400])
+                state = "AUTHENTICATED" if is_auth else ("UNAUTHENTICATED" if res.status_code in [401, 403] else "DEGRADED")
+                results["Sarvam AI"] = {
+                    "state": state,
+                    "status": "ONLINE" if is_auth else f"HTTP_{res.status_code}",
+                    "reachable": True,
+                    "authenticated": is_auth,
+                    "response_code": res.status_code,
+                    "latency_ms": latency,
+                    "speaker": settings.SARVAM_SPEAKER,
+                    "model": settings.SARVAM_MODEL,
+                    "verified_at": verified_ts,
+                    "verified_iso": verified_iso
+                }
+        except Exception as e:
+            results["Sarvam AI"] = {
+                "state": "UNAVAILABLE",
+                "status": "OFFLINE",
+                "reachable": False,
+                "authenticated": False,
+                "latency_ms": None,
+                "error": str(e)[:80],
+                "verified_at": verified_ts,
+                "verified_iso": verified_iso
+            }
+    else:
+        results["Sarvam AI"] = {
+            "state": "NOT_CONFIGURED",
+            "status": "NOT_CONFIGURED",
+            "reachable": False,
+            "authenticated": False,
+            "latency_ms": None,
+            "verified_at": verified_ts,
+            "verified_iso": verified_iso
+        }
+
+    # 5. Ollama (Local Private Sovereign LLM)
     try:
         t0 = time.perf_counter()
         async with httpx.AsyncClient(timeout=1.5) as client:
             res = await client.get(f"{settings.OLLAMA_BASE_URL}/api/tags")
             latency = round((time.perf_counter() - t0) * 1000, 1)
+            is_online = (res.status_code == 200)
             results["Ollama (Local Private)"] = {
-                "status": "ONLINE" if res.status_code == 200 else "DEGRADED",
+                "state": "AUTHENTICATED" if is_online else "DEGRADED",
+                "status": "ONLINE" if is_online else f"HTTP_{res.status_code}",
+                "reachable": True,
+                "authenticated": True,
+                "response_code": res.status_code,
                 "latency_ms": latency,
-                "url": settings.OLLAMA_BASE_URL
+                "url": settings.OLLAMA_BASE_URL,
+                "verified_at": verified_ts,
+                "verified_iso": verified_iso
             }
     except Exception:
         results["Ollama (Local Private)"] = {
+            "state": "UNAVAILABLE",
             "status": "OFFLINE",
+            "reachable": False,
+            "authenticated": False,
             "latency_ms": None,
-            "note": "Optional local offline LLM daemon not running"
+            "note": "Optional local offline LLM daemon not running",
+            "verified_at": verified_ts,
+            "verified_iso": verified_iso
         }
 
     return results

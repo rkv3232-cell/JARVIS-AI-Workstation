@@ -538,9 +538,6 @@ def execute_os_command(user_query: str) -> Dict[str, Any]:
     if not (has_action_verb or is_standalone_app):
         return {"status": "not_handled", "message": "Command not recognized as a desktop action."}
 
-# Backward compatibility alias
-execute_os_action = execute_os_command
-
     # Extract clean target by removing action verbs and filler words
     cleaned = cmd
     for word in sorted(ACTION_VERBS + FILLER_WORDS, key=len, reverse=True):

@@ -246,41 +246,89 @@ class WorkflowEngine:
             "timestamp": time.time()
         })
 
-        # Step 2: CONDITION EVALUATION
+        # Step 2: CONDITION EVALUATION (Strict Fail-Closed and Type Validated)
         cond = wf.get("condition_config", {})
         cond_met = True
+        cond_error = None
+        is_simulated_cond = False
+
+        ALLOWED_OPERATORS = {">", "<", ">=", "<=", "==", "!=", "outside_range", "inside_range"}
+
         if cond and cond.get("type") != "always_true":
             field = cond.get("field")
             op = cond.get("operator")
             val = cond.get("value")
-            target_val = context.get(field)
 
-            if target_val is not None:
-                if op == ">":
-                    cond_met = target_val > val
-                elif op == "<":
-                    cond_met = target_val < val
-                elif op == "==":
-                    cond_met = target_val == val
-                elif op == "outside_range":
-                    r = cond.get("range", [30, 70])
-                    cond_met = target_val < r[0] or target_val > r[1]
+            # 1. Operator validation
+            if not op or op not in ALLOWED_OPERATORS:
+                cond_met = False
+                cond_error = f"Unknown or invalid condition operator: '{op}'"
+            elif not field:
+                cond_met = False
+                cond_error = "Condition missing required 'field' identifier."
+            elif field not in context or context.get(field) is None:
+                # 2. Missing Context: Strictly FAIL-CLOSED (Never auto-pass!)
+                cond_met = False
+                if is_dry_run:
+                    is_simulated_cond = True
+                    cond_error = f"Context field '{field}' unavailable in dry-run simulation."
+                else:
+                    cond_error = f"Required condition field '{field}' was missing from execution context. Halted fail-closed."
             else:
-                cond_met = True  # Default pass for testing
+                target_val = context.get(field)
+                try:
+                    # 3. Type-safe comparison
+                    if op in [">", "<", ">=", "<="]:
+                        num_target = float(target_val)
+                        num_val = float(val)
+                        if op == ">":
+                            cond_met = num_target > num_val
+                        elif op == "<":
+                            cond_met = num_target < num_val
+                        elif op == ">=":
+                            cond_met = num_target >= num_val
+                        elif op == "<=":
+                            cond_met = num_target <= num_val
+                    elif op == "==":
+                        cond_met = (target_val == val)
+                    elif op == "!=":
+                        cond_met = (target_val != val)
+                    elif op in ["outside_range", "inside_range"]:
+                        r = cond.get("range", [30, 70])
+                        num_target = float(target_val)
+                        r_min = float(r[0])
+                        r_max = float(r[1])
+                        in_rng = (r_min <= num_target <= r_max)
+                        cond_met = not in_rng if op == "outside_range" else in_rng
+                except (ValueError, TypeError) as te:
+                    cond_met = False
+                    cond_error = f"Operand type validation error: cannot compare {type(target_val).__name__} with {type(val).__name__} ({te})"
 
         step_trace.append({
             "step": "CONDITION",
             "condition": cond,
             "met": cond_met,
+            "error": cond_error,
+            "simulated_condition": is_simulated_cond,
             "timestamp": time.time()
         })
 
+        if cond_error and "Unknown or invalid condition operator" in cond_error:
+            cls._record_run(run_id, wf_id, is_dry_run, "VALIDATION_FAILED", step_trace, t_start)
+            return {
+                "success": False,
+                "status": "VALIDATION_FAILED",
+                "error": cond_error,
+                "trace": step_trace
+            }
+
         if not cond_met:
-            cls._record_run(run_id, wf_id, is_dry_run, "SKIPPED", step_trace, t_start)
+            status_label = "SIMULATED_FAIL_CLOSED" if (is_dry_run and is_simulated_cond) else "SKIPPED_FAIL_CLOSED"
+            cls._record_run(run_id, wf_id, is_dry_run, status_label, step_trace, t_start)
             return {
                 "success": True,
-                "status": "SKIPPED",
-                "message": "Workflow conditions were not met.",
+                "status": status_label,
+                "message": cond_error or "Workflow condition evaluated to False (Execution halted).",
                 "trace": step_trace
             }
 

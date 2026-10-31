@@ -213,8 +213,9 @@ class StrategyLabBacktester:
         walk_forward_ratio: float = 0.70
     ) -> Dict[str, Any]:
         """
-        Executes backtest with walk-forward split, computing Win Rate %,
-        Profit Factor, Max Drawdown %, Equity Curve, and Trade Logs.
+        Executes backtest with realistic Next-Bar Open execution model,
+        preserving indicator warm-up for out-of-sample evaluation,
+        and distinguishing chronological holdout splits from rolling walk-forward validation.
         """
         val_res = MarketDataValidator.validate_candles(candles, data_source_label="BACKTEST_INPUT")
         if not val_res["is_valid"]:
@@ -227,17 +228,39 @@ class StrategyLabBacktester:
 
         params = params or {}
         split_idx = int(total_bars * walk_forward_ratio)
-        in_sample_candles = clean_candles[:split_idx]
-        out_of_sample_candles = clean_candles[split_idx:]
 
-        # Run complete run
-        full_res = cls._simulate_strategy(clean_candles, strategy_name, params, initial_capital, slippage_pct, fee_pct)
-        in_sample_res = cls._simulate_strategy(in_sample_candles, strategy_name, params, initial_capital, slippage_pct, fee_pct)
-        out_sample_res = cls._simulate_strategy(out_of_sample_candles, strategy_name, params, initial_capital, slippage_pct, fee_pct)
+        # 1. Full Period Simulation (Execution starts at bar 1 via Next-Bar Open)
+        full_res = cls._simulate_strategy(
+            clean_candles, strategy_name, params, initial_capital, slippage_pct, fee_pct,
+            eval_start_idx=1, eval_end_idx=total_bars - 1
+        )
+
+        # 2. In-Sample Period [1 .. split_idx - 1]
+        in_sample_res = cls._simulate_strategy(
+            clean_candles, strategy_name, params, initial_capital, slippage_pct, fee_pct,
+            eval_start_idx=1, eval_end_idx=split_idx - 1
+        )
+
+        # 3. Out-of-Sample Period [split_idx .. total_bars - 1] with FULL warm-up history preserved
+        out_sample_res = cls._simulate_strategy(
+            clean_candles, strategy_name, params, initial_capital, slippage_pct, fee_pct,
+            eval_start_idx=split_idx, eval_end_idx=total_bars - 1
+        )
+
+        # 4. Optional Rolling Walk-Forward Windows (if dataset has >= 60 bars)
+        rolling_wf = None
+        if total_bars >= 60:
+            rolling_wf = cls.run_rolling_walk_forward(clean_candles, strategy_name, params, initial_capital, slippage_pct, fee_pct)
+
+        # Performance Degradation Metric
+        pf_in = in_sample_res["profit_factor"]
+        pf_out = out_sample_res["profit_factor"]
+        degradation_ratio = round(pf_out / pf_in, 2) if pf_in > 0 else 0.0
 
         return {
             "success": True,
-            "disclaimer": "Educational & Simulated Analytical Backtest Only — Not Financial Advice",
+            "disclaimer": "Educational & Simulated Analytical Backtest Only — Not Real Financial Brokerage Advice",
+            "execution_model": "Next-Bar Open (Zero Look-Ahead Bias, Frictions & Gap Adjusted)",
             "strategy": strategy_name,
             "parameters": params,
             "candle_count": total_bars,
@@ -254,8 +277,22 @@ class StrategyLabBacktester:
                 "winning_trades": full_res["winning_trades"],
                 "losing_trades": full_res["losing_trades"],
                 "sharpe_ratio": full_res["sharpe_ratio"],
-                "trades": full_res["trades"][:50],  # Latest 50 trades
+                "trades": full_res["trades"][:50],
                 "equity_curve": full_res["equity_curve"]
+            },
+            "chronological_holdout_split": {
+                "in_sample_bars": split_idx,
+                "in_sample_trades": in_sample_res["total_trades"],
+                "in_sample_win_rate_pct": in_sample_res["win_rate_pct"],
+                "in_sample_return_pct": in_sample_res["total_return_pct"],
+                "in_sample_profit_factor": in_sample_res["profit_factor"],
+                "out_of_sample_bars": total_bars - split_idx,
+                "out_of_sample_trades": out_sample_res["total_trades"],
+                "out_of_sample_win_rate_pct": out_sample_res["win_rate_pct"],
+                "out_of_sample_return_pct": out_sample_res["total_return_pct"],
+                "out_of_sample_profit_factor": out_sample_res["profit_factor"],
+                "profit_factor_degradation_ratio": degradation_ratio,
+                "warmup_bars_preserved": split_idx
             },
             "walk_forward_validation": {
                 "in_sample_win_rate_pct": in_sample_res["win_rate_pct"],
@@ -264,8 +301,69 @@ class StrategyLabBacktester:
                 "out_of_sample_win_rate_pct": out_sample_res["win_rate_pct"],
                 "out_of_sample_return_pct": out_sample_res["total_return_pct"],
                 "out_of_sample_profit_factor": out_sample_res["profit_factor"],
-                "is_robust": (out_sample_res["profit_factor"] >= 1.05 and out_sample_res["win_rate_pct"] >= 45.0)
-            }
+                "profit_factor_degradation_ratio": degradation_ratio
+            },
+            "rolling_walk_forward": rolling_wf
+        }
+
+    @classmethod
+    def run_rolling_walk_forward(
+        cls,
+        candles: List[Dict[str, Any]],
+        strategy_name: str,
+        params: Dict[str, Any],
+        initial_capital: float = 1000000.0,
+        slippage_pct: float = 0.05,
+        fee_pct: float = 0.03,
+        train_bars: int = 40,
+        test_bars: int = 15,
+        step_bars: int = 15
+    ) -> Dict[str, Any]:
+        """
+        Executes rolling window walk-forward validation across sequential time slices.
+        """
+        total = len(candles)
+        windows = []
+        cur_start = 0
+
+        while cur_start + train_bars + test_bars <= total:
+            train_end = cur_start + train_bars
+            test_end = train_end + test_bars
+
+            # In-sample evaluation
+            in_res = cls._simulate_strategy(
+                candles, strategy_name, params, initial_capital, slippage_pct, fee_pct,
+                eval_start_idx=cur_start + 1, eval_end_idx=train_end - 1
+            )
+            # Out-of-sample evaluation (warm-up preserved from cur_start)
+            out_res = cls._simulate_strategy(
+                candles, strategy_name, params, initial_capital, slippage_pct, fee_pct,
+                eval_start_idx=train_end, eval_end_idx=test_end - 1
+            )
+
+            windows.append({
+                "window_index": len(windows) + 1,
+                "train_range": [cur_start, train_end - 1],
+                "test_range": [train_end, test_end - 1],
+                "in_sample_return_pct": in_res["total_return_pct"],
+                "in_sample_pf": in_res["profit_factor"],
+                "out_sample_return_pct": out_res["total_return_pct"],
+                "out_sample_pf": out_res["profit_factor"],
+                "out_sample_trades": out_res["total_trades"]
+            })
+            cur_start += step_bars
+
+        avg_out_pf = round(sum(w["out_sample_pf"] for w in windows) / len(windows), 2) if windows else 0.0
+        avg_out_ret = round(sum(w["out_sample_return_pct"] for w in windows) / len(windows), 2) if windows else 0.0
+
+        return {
+            "total_windows": len(windows),
+            "train_window_bars": train_bars,
+            "test_window_bars": test_bars,
+            "step_bars": step_bars,
+            "average_out_of_sample_profit_factor": avg_out_pf,
+            "average_out_of_sample_return_pct": avg_out_ret,
+            "windows": windows
         }
 
     @classmethod
@@ -276,20 +374,25 @@ class StrategyLabBacktester:
         params: Dict[str, Any],
         initial_capital: float,
         slippage_pct: float,
-        fee_pct: float
+        fee_pct: float,
+        eval_start_idx: int = 1,
+        eval_end_idx: Optional[int] = None
     ) -> Dict[str, Any]:
         closes = [c["close"] for c in candles]
         signals = [0] * len(candles)  # 1 = BUY, -1 = SELL / EXIT
+        n = len(candles)
+        eval_end_idx = eval_end_idx if eval_end_idx is not None else (n - 1)
+        eval_end_idx = min(eval_end_idx, n - 1)
 
         # -------------------------------------------------------------
-        # Generate Signals
+        # Generate Signals using information up to bar i's close
         # -------------------------------------------------------------
         if strategy_name == "sma_ema_crossover":
             fast_p = int(params.get("fast_period", 9))
             slow_p = int(params.get("slow_period", 21))
             fast_ema = compute_ema(closes, fast_p)
             slow_ema = compute_ema(closes, slow_p)
-            for i in range(1, len(candles)):
+            for i in range(1, n):
                 if fast_ema[i] and slow_ema[i] and fast_ema[i-1] and slow_ema[i-1]:
                     if fast_ema[i-1] <= slow_ema[i-1] and fast_ema[i] > slow_ema[i]:
                         signals[i] = 1  # Golden cross
@@ -301,7 +404,7 @@ class StrategyLabBacktester:
             oversold = float(params.get("oversold", 30.0))
             overbought = float(params.get("overbought", 70.0))
             rsi = compute_rsi(closes, period)
-            for i in range(1, len(candles)):
+            for i in range(1, n):
                 if rsi[i] and rsi[i-1]:
                     if rsi[i-1] < oversold and rsi[i] >= oversold:
                         signals[i] = 1
@@ -314,7 +417,7 @@ class StrategyLabBacktester:
             sig = int(params.get("signal", 9))
             macd_dict = compute_macd(closes, fast, slow, sig)
             hist = macd_dict["histogram"]
-            for i in range(1, len(candles)):
+            for i in range(1, n):
                 if hist[i] is not None and hist[i-1] is not None:
                     if hist[i-1] <= 0 and hist[i] > 0:
                         signals[i] = 1
@@ -325,7 +428,7 @@ class StrategyLabBacktester:
             bb = compute_bollinger_bands(closes, int(params.get("period", 20)))
             upper = bb["upper"]
             lower = bb["lower"]
-            for i in range(1, len(candles)):
+            for i in range(1, n):
                 if upper[i] and lower[i]:
                     if closes[i-1] <= upper[i-1] and closes[i] > upper[i]:
                         signals[i] = 1
@@ -341,7 +444,8 @@ class StrategyLabBacktester:
                     signals[b_idx] = 1 if f["type"] == "BULLISH_FVG" else -1
 
         # -------------------------------------------------------------
-        # Execute Trades Simulation
+        # Execute Trades: NEXT-BAR OPEN MODEL (Strictly No Look-Ahead)
+        # Signal on candle i-1 close executes at candle i open.
         # -------------------------------------------------------------
         equity = initial_capital
         peak_equity = initial_capital
@@ -351,21 +455,28 @@ class StrategyLabBacktester:
         equity_curve = []
 
         total_friction = (slippage_pct + fee_pct) / 100.0
+        commission_flat = 20.0
 
-        for i, c in enumerate(candles):
-            price = c["close"]
-            sig = signals[i]
+        for i in range(eval_start_idx, eval_end_idx + 1):
+            c = candles[i]
+            open_price = c["open"]
+            close_price = c["close"]
             t = c["time"]
 
-            # Exit check if currently in position
+            # Signal confirmed on previous candle close
+            prev_signal = signals[i - 1] if i > 0 else 0
+
+            # 1. Exit Evaluation
             if position:
-                # Check exit signal or force close at last bar
-                should_exit = (sig == -1) or (i == len(candles) - 1)
+                should_exit = (prev_signal == -1) or (i == eval_end_idx)
                 if should_exit:
-                    exit_price = price * (1.0 - total_friction)
-                    pnl = (exit_price - position["entry_price"]) * position["qty"]
+                    # Execute fill at current candle's open price incorporating friction & flat fee
+                    fill_price = open_price if (prev_signal == -1) else close_price
+                    exit_price = fill_price * (1.0 - total_friction)
+                    gross_pnl = (exit_price - position["entry_price"]) * position["qty"]
+                    net_pnl = gross_pnl - commission_flat
                     ret_pct = ((exit_price - position["entry_price"]) / position["entry_price"]) * 100.0
-                    equity += pnl
+                    equity += net_pnl
 
                     trades.append({
                         "entry_time": position["entry_time"],
@@ -373,29 +484,30 @@ class StrategyLabBacktester:
                         "entry_price": round(position["entry_price"], 2),
                         "exit_price": round(exit_price, 2),
                         "qty": position["qty"],
-                        "pnl": round(pnl, 2),
+                        "fee": commission_flat,
+                        "pnl": round(net_pnl, 2),
                         "return_pct": round(ret_pct, 2),
-                        "reason": "SIGNAL_EXIT" if sig == -1 else "END_OF_DATA"
+                        "reason": "SIGNAL_EXIT_NEXT_OPEN" if prev_signal == -1 else "EVAL_END"
                     })
                     position = None
 
-            # Entry check
-            elif sig == 1 and not position:
-                entry_price = price * (1.0 + total_friction)
-                # Allocate 95% of available equity per trade
-                allocated = equity * 0.95
+            # 2. Entry Evaluation (Next-Bar Open Execution)
+            elif prev_signal == 1 and not position and i < eval_end_idx:
+                entry_price = open_price * (1.0 + total_friction)
+                allocated = max(0, equity * 0.95 - commission_flat)
                 qty = max(1, int(allocated / entry_price))
-                if qty * entry_price <= equity:
+                if (qty * entry_price) + commission_flat <= equity:
+                    equity -= commission_flat
                     position = {
                         "entry_price": entry_price,
                         "entry_time": t,
                         "qty": qty
                     }
 
-            # Update curve & drawdown
+            # Update equity curve and drawdown
             curr_equity = equity
             if position:
-                unrealized = (price - position["entry_price"]) * position["qty"]
+                unrealized = (close_price - position["entry_price"]) * position["qty"]
                 curr_equity += unrealized
 
             if curr_equity > peak_equity:
@@ -424,7 +536,6 @@ class StrategyLabBacktester:
         total_ret_pct = round(((equity - initial_capital) / initial_capital) * 100.0, 2)
         max_dd_pct = round((max_drawdown / peak_equity * 100.0), 2) if peak_equity > 0 else 0.0
 
-        # Simple Sharpe calculation from trade return percentages
         if total_trades > 1:
             rets = [t["return_pct"] for t in trades]
             mean_ret = sum(rets) / len(rets)

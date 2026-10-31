@@ -1,3 +1,25 @@
+// Automatic X-JARVIS-Session Header Interceptor
+const _origFetch = window.fetch;
+window.fetch = function(url, options = {}) {
+  const tokenMatch = document.cookie.match(new RegExp('(^| )session_token=([^;]+)'));
+  const token = tokenMatch ? decodeURIComponent(tokenMatch[2]) : (localStorage.getItem("jarvis_session_token") || "");
+  if (token && typeof url === "string" && url.startsWith("/api/")) {
+    options.headers = options.headers || {};
+    if (options.headers instanceof Headers) {
+      if (!options.headers.has("X-JARVIS-Session")) {
+        options.headers.set("X-JARVIS-Session", token);
+      }
+    } else if (Array.isArray(options.headers)) {
+      options.headers.push(["X-JARVIS-Session", token]);
+    } else {
+      if (!options.headers["X-JARVIS-Session"]) {
+        options.headers["X-JARVIS-Session"] = token;
+      }
+    }
+  }
+  return _origFetch.call(this, url, options);
+};
+
 // ==========================================================================
 // JARVIS-APEX CLIENT CONTROLLER
 // Dashboard UI: 100% English // Voice & Conversation: Pure Hindi / Hinglish
@@ -286,10 +308,17 @@ class JarvisClient {
     } catch (e) { }
   }
 
-  // 2. WebSocket Connection
+  getSessionToken() {
+    const match = document.cookie.match(new RegExp('(^| )session_token=([^;]+)'));
+    if (match) return decodeURIComponent(match[2]);
+    return localStorage.getItem("jarvis_session_token") || "";
+  }
+
+  // 2. WebSocket Connection (Secure Token Authenticated)
   initWebSocket() {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    const token = this.getSessionToken();
+    const wsUrl = `${protocol}//${window.location.host}/ws${token ? '?token=' + encodeURIComponent(token) : ''}`;
     const statusEl = document.getElementById("ws-status");
 
     statusEl.textContent = "CONNECTING...";

@@ -3,6 +3,8 @@
 *.env.local
 *.key
 *.pem
+.session_secret
+data/.session_secret
 serviceAccountKey.json
 
 # Python

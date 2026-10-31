@@ -1,16 +1,67 @@
 import os
+import secrets
 from pathlib import Path
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
+WEAK_TOKENS = {
+    "jarvis-apex-session-key-v2",
+    "jarvis_secure_token_change_in_production",
+    "admin",
+    "password",
+    "secret",
+    "12345678",
+    "jarvis",
+    "changeme"
+}
+
+def _resolve_session_token(base_dir: Path, debug: bool, env: str) -> str:
+    raw_token = os.getenv("SESSION_TOKEN", "").strip()
+    is_production = env.lower() == "production" or not debug
+
+    if is_production:
+        if not raw_token or raw_token.lower() in WEAK_TOKENS or len(raw_token) < 16:
+            raise RuntimeError(
+                "CRITICAL SECURITY CONFIGURATION ERROR: J.A.R.V.I.S. rejected startup in production mode "
+                "because SESSION_TOKEN is missing or set to a predictable/weak default. "
+                "Configure a secure, high-entropy token (minimum 16 characters) in your .env file."
+            )
+        return raw_token
+
+    # In development mode, auto-generate and persist a cryptographically strong token if none configured
+    if not raw_token or raw_token.lower() in WEAK_TOKENS:
+        secret_file = base_dir / "data" / ".session_secret"
+        if secret_file.exists():
+            try:
+                cached = secret_file.read_text(encoding="utf-8").strip()
+                if cached and cached.lower() not in WEAK_TOKENS and len(cached) >= 16:
+                    return cached
+            except Exception:
+                pass
+
+        new_token = secrets.token_urlsafe(32)
+        try:
+            secret_file.parent.mkdir(parents=True, exist_ok=True)
+            secret_file.write_text(new_token, encoding="utf-8")
+        except Exception:
+            pass
+        return new_token
+
+    return raw_token
+
+_raw_debug = os.getenv("DEBUG", "False").lower() == "true"
+_raw_env = os.getenv("ENVIRONMENT", "development")
+_resolved_token = _resolve_session_token(BASE_DIR, _raw_debug, _raw_env)
+
 class Settings(BaseModel):
     BASE_DIR: Path = BASE_DIR
     HOST: str = os.getenv("HOST", "127.0.0.1")
     PORT: int = int(os.getenv("PORT", "8000"))
-    DEBUG: bool = os.getenv("DEBUG", "True").lower() == "true"
+    DEBUG: bool = _raw_debug
+    ENVIRONMENT: str = _raw_env
     
     # Voice Settings
     JARVIS_LANG: str = os.getenv("JARVIS_LANG", "hi")
@@ -64,7 +115,7 @@ class Settings(BaseModel):
     DEFAULT_USER_CITY: str = os.getenv("USER_LOCATION", "Dullahpur, Uttar Pradesh")
 
     # Security & Session
-    SESSION_TOKEN: str = os.getenv("SESSION_TOKEN", "jarvis-apex-session-key-v2")
+    SESSION_TOKEN: str = _resolved_token
     ALLOWED_ORIGINS: list[str] = [
         "http://127.0.0.1:8000",
         "http://localhost:8000",

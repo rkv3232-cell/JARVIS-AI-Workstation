@@ -69,40 +69,71 @@ def redact_secrets(text_or_data: Any) -> Any:
 # 2. SESSION TOKEN AUTHENTICATION
 # =========================================================================
 api_key_header = APIKeyHeader(name="X-JARVIS-Session", auto_error=False)
-api_key_query = APIKeyQuery(name="token", auto_error=False)
 
 def verify_session_token(
     request: Request,
-    token_header: Optional[str] = Security(api_key_header),
-    token_query: Optional[str] = Security(api_key_query)
+    token_header: Optional[str] = Security(api_key_header)
 ) -> bool:
     """
     Validates the session token for sensitive administrative & OS endpoints.
-    Allows loopback requests if configured, or validates token against settings.SESSION_TOKEN.
+    Enforces authentication via X-JARVIS-Session header or Authorization Bearer header,
+    or session_token cookie. Query parameters are explicitly rejected for REST routes.
     """
-    # Accept token from header, query, or cookie
-    token = token_header or token_query or request.cookies.get("session_token")
-    
-    # Check localhost loopback with development tolerance if no token provided
-    client_host = request.client.host if request.client else "unknown"
-    is_local = client_host in ["127.0.0.1", "localhost", "::1"]
-    
-    if token:
-        if secrets.compare_digest(token, settings.SESSION_TOKEN):
-            return True
+    # 1. Header: X-JARVIS-Session
+    token = token_header
+
+    # 2. Header: Authorization: Bearer <token>
+    if not token:
+        auth_hdr = request.headers.get("Authorization", "")
+        if auth_hdr.startswith("Bearer "):
+            token = auth_hdr[7:].strip()
+
+    # 3. Secure session cookie
+    if not token:
+        token = request.cookies.get("session_token")
+
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing required J.A.R.V.I.S. session authorization header (X-JARVIS-Session)."
+        )
+
+    if not secrets.compare_digest(token, settings.SESSION_TOKEN):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired J.A.R.V.I.S. session token."
         )
-    
-    # If no token passed, require token unless request comes strictly from local machine in debug mode
-    if is_local and settings.DEBUG:
-        return True
-        
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Missing J.A.R.V.I.S. session authorization header (X-JARVIS-Session)."
+
+    return True
+
+
+async def verify_websocket_auth(websocket: Request) -> bool:
+    """
+    Validates Origin and session token for WebSocket handshakes.
+    Returns True if valid, False otherwise.
+    """
+    # 1. Origin Verification
+    origin = websocket.headers.get("origin")
+    if origin:
+        normalized_origin = origin.rstrip("/")
+        allowed = [o.rstrip("/") for o in settings.ALLOWED_ORIGINS]
+        # Check against allowed list
+        if normalized_origin not in allowed:
+            # Allow local origins with same host
+            if not any(h in normalized_origin for h in ["127.0.0.1", "localhost", "pywebview"]):
+                return False
+
+    # 2. Token Verification (Header, Cookie, or Query for WS)
+    token = (
+        websocket.headers.get("X-JARVIS-Session")
+        or websocket.cookies.get("session_token")
+        or websocket.query_params.get("token")
     )
+
+    if not token or not secrets.compare_digest(token, settings.SESSION_TOKEN):
+        return False
+
+    return True
 
 
 # =========================================================================
@@ -283,6 +314,7 @@ class PrivacyController:
     """
     Thread-safe hardware and software privacy kill-switches.
     Wake listener is DISABLED by default until explicitly activated by user.
+    Guarantees physical release of audio stream before reporting status.
     """
     def __init__(self):
         self._lock = threading.Lock()
@@ -292,17 +324,28 @@ class PrivacyController:
 
     def get_status(self) -> Dict[str, Any]:
         with self._lock:
+            from .local_wake_listener import is_wake_listener_running
+            stream_running = is_wake_listener_running()
             return {
                 "mic_kill_switch": self.mic_kill_switch,
                 "screen_kill_switch": self.screen_kill_switch,
                 "wake_listener_active": self.wake_listener_active,
-                "mic_active": not self.mic_kill_switch and self.wake_listener_active,
+                "mic_active": not self.mic_kill_switch and stream_running,
                 "screen_active": not self.screen_kill_switch and settings.ENABLE_SCREEN_VISION
             }
 
     def set_mic_kill_switch(self, state: bool) -> bool:
         with self._lock:
             self.mic_kill_switch = state
+            from .local_wake_listener import stop_local_wake_listener, start_local_wake_listener
+            if state:
+                # Mute mic: immediately stop listener and release microphone stream
+                stop_local_wake_listener()
+            else:
+                # Release mute: restart wake listener ONLY if user previously enabled it
+                if self.wake_listener_active:
+                    start_local_wake_listener()
+
             log_audit_event("privacy_kill_switch", "microphone", "high", "engaged" if state else "released", "user")
             return self.mic_kill_switch
 
@@ -315,6 +358,13 @@ class PrivacyController:
     def set_wake_listener(self, state: bool) -> bool:
         with self._lock:
             self.wake_listener_active = state
+            from .local_wake_listener import stop_local_wake_listener, start_local_wake_listener
+            if state:
+                if not self.mic_kill_switch:
+                    start_local_wake_listener()
+            else:
+                stop_local_wake_listener()
+
             log_audit_event("wake_word_listener", "voice_activation", "medium", "enabled" if state else "disabled", "user")
             return self.wake_listener_active
 

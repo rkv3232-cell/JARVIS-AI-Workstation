@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Query, Request, HTTPException, status
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Query, Request, HTTPException, status, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -47,6 +47,7 @@ from .security import (
     validate_upload_file,
     redact_secrets,
     verify_session_token,
+    verify_websocket_auth,
     RiskLevel
 )
 from .os_controller import execute_confirmed_action
@@ -258,16 +259,24 @@ async def get_telemetry_endpoint():
     return get_system_telemetry()
 
 # =========================================================================
-# 6. SECURITY & ACTION CONFIRMATION ENDPOINTS
+# 6. SECURITY & ACTION CONFIRMATION ENDPOINTS (AUTHENTICATED)
 # =========================================================================
-@app.get("/api/os/pending-actions")
+@app.get("/api/auth/session")
+async def get_session_info(auth: bool = Depends(verify_session_token)):
+    return {
+        "authenticated": True,
+        "environment": settings.ENVIRONMENT,
+        "debug": settings.DEBUG
+    }
+
+@app.get("/api/os/pending-actions", dependencies=[Depends(verify_session_token)])
 async def get_pending_actions_endpoint():
     return {"pending_actions": action_registry.list_pending()}
 
 class ActionConfirmPayload(BaseModel):
     action_id: str
 
-@app.post("/api/os/confirm")
+@app.post("/api/os/confirm", dependencies=[Depends(verify_session_token)])
 async def confirm_action_endpoint(payload: ActionConfirmPayload):
     ok, msg, action = action_registry.approve(payload.action_id)
     if not ok or not action:
@@ -277,18 +286,18 @@ async def confirm_action_endpoint(payload: ActionConfirmPayload):
     action.status = "executed" if result.get("success") else "failed"
     return {"success": result.get("success", False), "action": action.to_dict(), "result": result}
 
-@app.post("/api/os/reject")
+@app.post("/api/os/reject", dependencies=[Depends(verify_session_token)])
 async def reject_action_endpoint(payload: ActionConfirmPayload):
     ok, msg = action_registry.reject(payload.action_id)
     if not ok:
         raise HTTPException(status_code=400, detail=msg)
     return {"success": True, "message": msg}
 
-@app.get("/api/security/audit-logs")
+@app.get("/api/security/audit-logs", dependencies=[Depends(verify_session_token)])
 async def get_audit_logs_endpoint(limit: int = 50):
     return {"audit_logs": get_recent_audit_logs(limit=limit)}
 
-# Privacy Kill Switches
+# Privacy Kill Switches (Authenticated)
 @app.get("/api/privacy/status")
 async def get_privacy_status_endpoint():
     return privacy_guard.get_status()
@@ -297,7 +306,7 @@ class KillSwitchPayload(BaseModel):
     target: str  # mic, screen, wake_listener
     state: bool  # True or False
 
-@app.post("/api/privacy/kill-switch")
+@app.post("/api/privacy/kill-switch", dependencies=[Depends(verify_session_token)])
 async def toggle_kill_switch_endpoint(payload: KillSwitchPayload):
     t = payload.target.lower()
     if t == "mic":
@@ -372,9 +381,9 @@ class PaperOrderRequest(BaseModel):
     stop_loss: Optional[float] = None
     take_profit: Optional[float] = None
 
-@app.post("/api/trading/paper/order")
+@app.post("/api/trading/paper/order", dependencies=[Depends(verify_session_token)])
 async def post_paper_order_endpoint(req: PaperOrderRequest):
-    return PaperTradingPortfolio.execute_order(
+    res = PaperTradingPortfolio.execute_order(
         symbol=req.symbol,
         side=req.side,
         quantity=req.quantity,
@@ -383,10 +392,25 @@ async def post_paper_order_endpoint(req: PaperOrderRequest):
         stop_loss=req.stop_loss,
         take_profit=req.take_profit
     )
+    if not res.get("success"):
+        raise HTTPException(status_code=400, detail=res.get("error", "Order rejected."))
+    return res
 
-@app.post("/api/trading/paper/reset")
-async def post_paper_reset_endpoint(initial_capital: float = Query(1000000.0)):
-    return PaperTradingPortfolio.reset_account(initial_capital=initial_capital)
+class PaperResetRequest(BaseModel):
+    initial_capital: float = 1000000.0
+    confirmed: bool = False
+    purge_history: bool = False
+
+@app.post("/api/trading/paper/reset", dependencies=[Depends(verify_session_token)])
+async def post_paper_reset_endpoint(payload: PaperResetRequest):
+    res = PaperTradingPortfolio.reset_account(
+        initial_capital=payload.initial_capital,
+        confirmed=payload.confirmed,
+        purge_history=payload.purge_history
+    )
+    if not res.get("success"):
+        raise HTTPException(status_code=400, detail=res.get("error", "Reset rejected."))
+    return res
 
 @app.get("/api/trading/psychology/analytics")
 async def get_psychology_analytics_endpoint():
@@ -405,7 +429,7 @@ class PsychologyEntryRequest(BaseModel):
     outcome: str = "OPEN"
     pnl: float = 0.0
 
-@app.post("/api/trading/psychology/entry")
+@app.post("/api/trading/psychology/entry", dependencies=[Depends(verify_session_token)])
 async def post_psychology_entry_endpoint(req: PsychologyEntryRequest):
     return TradingPsychologyEngine.record_entry(
         symbol=req.symbol,
@@ -418,9 +442,9 @@ async def post_psychology_entry_endpoint(req: PsychologyEntryRequest):
     )
 
 # =========================================================================
-# 9. PERSISTENT MEMORY BRAIN & DEEP RESEARCH WORKSPACE ENDPOINTS
+# 9. PERSISTENT MEMORY BRAIN & DEEP RESEARCH WORKSPACE ENDPOINTS (AUTHENTICATED)
 # =========================================================================
-@app.get("/api/memory")
+@app.get("/api/memory", dependencies=[Depends(verify_session_token)])
 async def get_memories_endpoint(category: Optional[str] = None, limit: int = 50, offset: int = 0):
     cat_enum = MemoryCategory(category) if category else None
     return {"memories": PersistentMemoryBrain.get_memories(category=cat_enum, limit=limit, offset=offset)}
@@ -432,7 +456,7 @@ class AddMemoryRequest(BaseModel):
     tags: Optional[List[str]] = None
     source: str = "user"
 
-@app.post("/api/memory")
+@app.post("/api/memory", dependencies=[Depends(verify_session_token)])
 async def post_memory_endpoint(req: AddMemoryRequest):
     cat_enum = MemoryCategory(req.category)
     mem_id = PersistentMemoryBrain.add_memory(
@@ -444,23 +468,23 @@ async def post_memory_endpoint(req: AddMemoryRequest):
     )
     return {"success": True, "memory_id": mem_id}
 
-@app.delete("/api/memory/{memory_id}")
+@app.delete("/api/memory/{memory_id}", dependencies=[Depends(verify_session_token)])
 async def delete_memory_endpoint(memory_id: str):
     ok = PersistentMemoryBrain.delete_memory(memory_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Memory not found.")
     return {"success": True, "message": f"Memory {memory_id} deleted."}
 
-@app.get("/api/memory/search")
+@app.get("/api/memory/search", dependencies=[Depends(verify_session_token)])
 async def search_memory_endpoint(q: str = Query(...), category: Optional[str] = None, limit: int = 20):
     cat_enum = MemoryCategory(category) if category else None
     return {"results": PersistentMemoryBrain.search_memories(query=q, category=cat_enum, limit=limit)}
 
-@app.get("/api/memory/export")
+@app.get("/api/memory/export", dependencies=[Depends(verify_session_token)])
 async def export_memory_endpoint():
     return PersistentMemoryBrain.export_all_memories()
 
-@app.post("/api/memory/import")
+@app.post("/api/memory/import", dependencies=[Depends(verify_session_token)])
 async def import_memory_endpoint(payload: Dict[str, Any]):
     count = PersistentMemoryBrain.import_memories(payload)
     return {"success": True, "imported_count": count}
@@ -486,7 +510,7 @@ async def get_voice_state_endpoint():
         "history": voice_state_machine.state_history
     }
 
-@app.post("/api/voice/interrupt")
+@app.post("/api/voice/interrupt", dependencies=[Depends(verify_session_token)])
 async def post_voice_interrupt_endpoint():
     """Interrupts active speech and resets listener immediately."""
     return await voice_state_machine.interrupt()
@@ -496,7 +520,7 @@ async def get_voice_devices_endpoint():
     return list_audio_devices()
 
 # =========================================================================
-# 11. WORKFLOW AUTOMATION STUDIO ENDPOINTS
+# 11. WORKFLOW AUTOMATION STUDIO ENDPOINTS (AUTHENTICATED)
 # =========================================================================
 @app.get("/api/workflows")
 async def list_workflows_endpoint():
@@ -506,35 +530,39 @@ async def list_workflows_endpoint():
 async def get_workflow_history_endpoint(limit: int = 30):
     return {"history": WorkflowEngine.get_run_history(limit=limit)}
 
-@app.post("/api/workflows")
+@app.post("/api/workflows", dependencies=[Depends(verify_session_token)])
 async def create_workflow_endpoint(data: Dict[str, Any]):
     return WorkflowEngine.create_workflow(data)
 
-@app.delete("/api/workflows/{wf_id}")
+@app.delete("/api/workflows/{wf_id}", dependencies=[Depends(verify_session_token)])
 async def delete_workflow_endpoint(wf_id: str):
     ok = WorkflowEngine.delete_workflow(wf_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Workflow not found.")
     return {"success": True, "message": "Workflow deleted."}
 
-@app.post("/api/workflows/{wf_id}/run")
+@app.post("/api/workflows/{wf_id}/run", dependencies=[Depends(verify_session_token)])
 async def run_workflow_endpoint(wf_id: str):
     return await WorkflowEngine.run_workflow(wf_id, is_dry_run=False)
 
-@app.post("/api/workflows/{wf_id}/dry-run")
+@app.post("/api/workflows/{wf_id}/dry-run", dependencies=[Depends(verify_session_token)])
 async def dry_run_workflow_endpoint(wf_id: str):
     return await WorkflowEngine.run_workflow(wf_id, is_dry_run=True)
 
 # =========================================================================
-# 12. AUTO-UPDATER ENDPOINTS
+# 12. AUTO-UPDATER ENDPOINTS (AUTHENTICATED)
 # =========================================================================
 @app.get("/api/updater/version")
 async def get_updater_version_endpoint():
     return {"version": SecureAutoUpdater.get_current_version()}
 
-@app.get("/api/updater/check")
+@app.get("/api/updater/check", dependencies=[Depends(verify_session_token)])
 async def check_updates_endpoint():
     return await SecureAutoUpdater.check_for_updates()
+
+@app.post("/api/updater/apply", dependencies=[Depends(verify_session_token)])
+async def apply_updates_endpoint(manifest: Dict[str, Any]):
+    return await SecureAutoUpdater.download_and_apply_update(manifest)
 
 # =========================================================================
 # 13. EXISTING MARKET SCAN, VISION & THREAT ENDPOINTS
@@ -565,7 +593,7 @@ class ScreenVisionPayload(BaseModel):
     query: Optional[str] = "इस लाइव स्क्रीन का विश्लेषण करें"
     image_base64: Optional[str] = None
 
-@app.post("/api/screen_vision")
+@app.post("/api/screen_vision", dependencies=[Depends(verify_session_token)])
 async def post_screen_vision_endpoint(payload: Optional[ScreenVisionPayload] = None, query: Optional[str] = None):
     if privacy_guard.screen_kill_switch:
         raise HTTPException(status_code=403, detail="Screen vision is disabled by privacy kill switch.")
@@ -573,14 +601,14 @@ async def post_screen_vision_endpoint(payload: Optional[ScreenVisionPayload] = N
     img_b64 = payload.image_base64 if payload else None
     return await analyze_screen_with_ai(custom_query=q, image_base64=img_b64)
 
-@app.post("/api/screen_patterns")
+@app.post("/api/screen_patterns", dependencies=[Depends(verify_session_token)])
 async def post_screen_patterns_endpoint(payload: Optional[ScreenVisionPayload] = None):
     if privacy_guard.screen_kill_switch:
         raise HTTPException(status_code=403, detail="Screen vision is disabled by privacy kill switch.")
     img_b64 = payload.image_base64 if payload else None
     return await detect_chart_patterns_and_overlays(image_base64=img_b64)
 
-@app.post("/api/screen_ocr")
+@app.post("/api/screen_ocr", dependencies=[Depends(verify_session_token)])
 async def post_screen_ocr_endpoint(payload: Optional[ScreenVisionPayload] = None):
     if privacy_guard.screen_kill_switch:
         raise HTTPException(status_code=403, detail="Screen vision is disabled by privacy kill switch.")
@@ -591,7 +619,7 @@ class URLAnalysisPayload(BaseModel):
     url: str
     context: Optional[str] = None
 
-@app.post("/api/analyze_url")
+@app.post("/api/analyze_url", dependencies=[Depends(verify_session_token)])
 async def post_analyze_url_endpoint(payload: URLAnalysisPayload):
     return await analyze_url_threat(payload.url, context_text=payload.context)
 
@@ -600,7 +628,7 @@ class PDFReportRequest(BaseModel):
     context: Optional[str] = None
     report_data: Optional[dict] = None
 
-@app.post("/api/generate_pdf_report")
+@app.post("/api/generate_pdf_report", dependencies=[Depends(verify_session_token)])
 async def generate_pdf_report_endpoint(req: PDFReportRequest):
     data = req.report_data or await analyze_url_threat(req.url, context_text=req.context)
     return generate_url_pdf_report(data)
@@ -609,7 +637,7 @@ class ResearchRequest(BaseModel):
     topic: str
     mode: Optional[str] = None
 
-@app.post("/api/research")
+@app.post("/api/research", dependencies=[Depends(verify_session_token)])
 async def post_research_endpoint(req: ResearchRequest):
     # Track persistent job in SQLite
     job_id = PersistentMemoryBrain.create_research_job(req.topic, mode=req.mode or "STANDARD")
@@ -654,7 +682,7 @@ async def post_journal_entry_endpoint(entry: dict):
         pnl=float(entry.get("pnl", 0.0))
     )
 
-@app.post("/api/chat", response_model=ChatResponse)
+@app.post("/api/chat", response_model=ChatResponse, dependencies=[Depends(verify_session_token)])
 async def chat_endpoint(req: ChatRequest):
     await voice_state_machine.transition_to(VoiceState.THINKING)
     result = await process_user_intent(req.message, progress_callback=ws_manager.broadcast)
@@ -680,7 +708,7 @@ async def chat_endpoint(req: ChatRequest):
         dynamic_widget=result.get("dynamic_widget")
     )
 
-@app.post("/api/transcribe")
+@app.post("/api/transcribe", dependencies=[Depends(verify_session_token)])
 async def transcribe_endpoint(file: UploadFile = File(...)):
     audio_bytes = await file.read()
     filename = file.filename or "input.wav"
@@ -694,10 +722,16 @@ async def transcribe_endpoint(file: UploadFile = File(...)):
     return {"text": transcript}
 
 # =========================================================================
-# 14. WEBSOCKET ENDPOINT (STABLE WITH WS_MANAGER)
+# 14. WEBSOCKET ENDPOINT (AUTHENTICATED & ORIGIN VALIDATED)
 # =========================================================================
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
+    # Enforce Origin validation and Session Token authentication
+    is_valid_auth = await verify_websocket_auth(ws)
+    if not is_valid_auth:
+        await ws.close(code=status.WS_1008_POLICY_VIOLATION, reason="Unauthorized: Missing or invalid session token or untrusted origin.")
+        return
+
     client_id = f"client_{uuid.uuid4().hex[:8]}"
     client = await ws_manager.connect(ws, client_id)
 
@@ -775,5 +809,14 @@ REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/reports", StaticFiles(directory=str(REPORTS_DIR)), name="reports")
 
 @app.get("/")
-async def serve_index():
-    return FileResponse(FRONTEND_DIR / "index.html")
+async def serve_index(request: Request):
+    response = FileResponse(FRONTEND_DIR / "index.html")
+    # Set secure session token cookie for local client authentication
+    response.set_cookie(
+        key="session_token",
+        value=settings.SESSION_TOKEN,
+        httponly=False,
+        samesite="lax",
+        secure=False
+    )
+    return response

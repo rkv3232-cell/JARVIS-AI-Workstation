@@ -22,13 +22,29 @@ J.A.R.V.I.S. APEX is designed to operate as a sovereign, secure local workstatio
 
 ## 2. Authentication & Session Management
 
-- **Session Token Verification:** Sensitive administrative and OS endpoints require a valid session token (`X-JARVIS-Session` header or cookie `session_token`).
-- **Loopback Tolerance:** In local development mode (`127.0.0.1`), loopback requests are verified against `settings.SESSION_TOKEN` using constant-time comparison (`secrets.compare_digest`) to prevent timing side-channel attacks.
-- **WebSocket Handshake Validation:** Connections to `/ws` are verified upon handshake.
+- **Mandatory Endpoint Enforcement:** All sensitive administrative, OS, memory, trading, and workflow execution endpoints require a valid session token via FastAPI dependencies (`verify_session_token`).
+- **Accepted Token Vectors:** Session credentials may be supplied via `X-JARVIS-Session` request header, `Authorization: Bearer <token>`, or `session_token` HTTP cookie. Query string tokens (`?token=...`) are explicitly rejected on ordinary REST endpoints.
+- **WebSocket Handshake Validation:** Every WebSocket handshake to `/ws` is cryptographically validated for:
+  1. Origin verification against `settings.ALLOWED_ORIGINS` (closing with code 1008 if untrusted).
+  2. Credential verification via cookie, header, or validated handshake token query param.
+- **High-Entropy Secret Generation:** Predictable default tokens have been eliminated. In local development, a secure 32-byte high-entropy token is dynamically generated and stored in `.session_secret` (git-ignored). In production mode (`ENVIRONMENT=production`), startup is aborted with a fatal `RuntimeError` if an explicit, cryptographically secure `SESSION_TOKEN` (>= 32 chars) is not configured.
+- **Constant-Time Verification:** All session token validations employ `secrets.compare_digest` to prevent timing side-channel attacks.
+- **Fail-Safe Defaults:** `DEBUG` defaults strictly to `False`.
 
 ---
 
-## 3. Two-Step Action Confirmation Registry
+## 3. Cryptographic Auto-Updater & Supply-Chain Hardening
+
+- **Ed25519 Digital Signatures:** Release manifests are verified against a pinned Ed25519 public key (`PINNED_UPDATE_PUBLIC_KEY_HEX`) over canonical JSON serialization (`separators=(',', ':')`) before manifest fields are read.
+- **Package Checksums:** Downloaded update archives are verified against signed SHA-256 integrity hashes.
+- **Transport Security:** Updates are restricted exclusively to HTTPS origins on whitelisted official hosts (`github.com`, `raw.githubusercontent.com`, `objects.githubusercontent.com`).
+- **ZIP-Slip Traversal Prevention:** The extraction engine resolves canonical targets against the extraction root and raises `SecurityError` upon detecting any parent directory traversal (`../`).
+- **Pre-Update Backups & Atomic Rollback:** An isolated backup snapshot of code directories (`updates/backup/`) is compiled prior to update application. In the event of an extraction error, the previous version is restored atomically.
+- **Offline Integrity:** Connection dropouts return an explicit `UPDATE_CHECK_UNAVAILABLE` status rather than falsely reporting that the system is up-to-date.
+
+---
+
+## 4. Hardware Privacy Kill Switches
 
 High-impact desktop operations are classified into three explicit risk categories:
 
@@ -69,12 +85,13 @@ Immutable Audit Log Written (data/audit_log.json)
 J.A.R.V.I.S. APEX features hardware and software isolation controls managed by `backend/security.py`:
 
 - **Microphone Kill Switch (`privacy_guard.mic_kill_switch`):**
-  - Instantly blocks audio input stream at the software boundary.
-  - Returns empty transcription buffers if engaged.
+  - Instantly blocks audio input stream at both software and hardware layer.
+  - Physical `sd.InputStream` is stopped and closed via thread-safe lock, releasing host hardware handles.
+  - Residual audio queues are drained immediately to prevent audio chunk leakage.
   - Accessible via UI toggle or `POST /api/privacy/kill-switch` (`target: mic`).
 - **Screen Vision Kill Switch (`privacy_guard.screen_kill_switch`):**
-  - Blocks all desktop screenshot captures and OCR models.
-  - Returns HTTP 403 Forbidden on `/api/screen_vision` if engaged.
+  - Universally enforced across all 4 capture entry points (`capture_desktop_image`, `analyze_screen_with_ai`, `detect_chart_patterns_and_overlays`, and `extract_screen_text_and_clipboard`).
+  - Returns HTTP 403 Forbidden or empty payload if engaged.
 - **Wake-Word Listener Default:**
   - `ENABLE_WAKE_WORD_DEFAULT=False` prevents continuous background microphone monitoring until the user explicitly toggles the wake word on.
 

@@ -29,7 +29,12 @@ def capture_desktop_image() -> Optional[Image.Image]:
     """
     Captures live desktop image natively on Windows.
     Used as an automatic fallback when WebRTC browser stream is initializing.
+    Enforces privacy kill-switch: returns None immediately if screen privacy is engaged.
     """
+    from .security import privacy_guard
+    if privacy_guard.screen_kill_switch or not settings.ENABLE_SCREEN_VISION:
+        return None
+
     # 1. Try PyAutoGUI
     try:
         import pyautogui
@@ -77,6 +82,14 @@ async def analyze_screen_with_ai(custom_query: Optional[str] = None, image_base6
     Processes via Gemini 2.5 Flash Multimodal Vision in ~1.2s.
     """
     global _latest_screen_analysis
+    from .security import privacy_guard
+    if privacy_guard.screen_kill_switch:
+        return {
+            "success": False,
+            "error": "Screen vision is blocked by privacy kill switch.",
+            "text": "सर, स्क्रीन विज़न वर्तमान में प्राइवेसी किल स्विच द्वारा अक्षम है।",
+            "trend": "BLOCKED"
+        }
     
     b64_img = image_base64 or ""
     
@@ -209,6 +222,17 @@ async def detect_chart_patterns_and_overlays(image_base64: Optional[str] = None)
     and Chart Patterns (Head & Shoulders, Double Top/Bottom, Channels).
     Returns structured bounding boxes and levels for direct canvas HUD rendering.
     """
+    from .security import privacy_guard
+    if privacy_guard.screen_kill_switch:
+        return {
+            "success": False,
+            "error": "Screen vision is blocked by privacy kill switch.",
+            "trend": "BLOCKED",
+            "summary": "सर, प्राइवेसी किल स्विच सक्रिय होने के कारण चार्ट विजन अवरुद्ध है।",
+            "patterns_detected": [],
+            "overlays": []
+        }
+
     b64_img = image_base64 or ""
     if not b64_img:
         img = capture_desktop_image()
@@ -293,6 +317,17 @@ async def extract_screen_text_and_clipboard(image_base64: Optional[str] = None) 
     Extracts visible code blocks, stack traces, errors, or commands from the live screen,
     and directly copies them to the host Windows Clipboard via pyperclip.
     """
+    from .security import privacy_guard
+    if privacy_guard.screen_kill_switch:
+        return {
+            "success": False,
+            "extracted_text": "",
+            "preview": "",
+            "char_count": 0,
+            "clipboard_copied": False,
+            "spoken": "सर, प्राइवेसी किल स्विच सक्रिय होने के कारण स्क्रीन से टेक्स्ट कॉपी नहीं किया जा सकता।"
+        }
+
     b64_img = image_base64 or ""
     if not b64_img:
         img = capture_desktop_image()

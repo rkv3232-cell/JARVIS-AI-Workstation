@@ -14,6 +14,7 @@ import time
 import shutil
 import subprocess
 import webbrowser
+from typing import Optional
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -56,7 +57,7 @@ def start_backend_process() -> subprocess.Popen:
     )
     return proc
 
-def launch_pywebview(backend_proc: subprocess.Popen):
+def launch_pywebview(backend_proc: Optional[subprocess.Popen]):
     try:
         import webview
     except ImportError:
@@ -67,12 +68,19 @@ def launch_pywebview(backend_proc: subprocess.Popen):
     print("[Launcher] Creating native desktop window (1400x900)...")
 
     def on_closed():
-        print("[Launcher] Desktop window closed by user. Terminating backend...")
-        try:
-            backend_proc.terminate()
-            backend_proc.wait(timeout=3)
-        except Exception:
-            backend_proc.kill()
+        print("[Launcher] Desktop window closed by user.")
+        if backend_proc is not None:
+            print("[Launcher] Terminating managed backend process...")
+            try:
+                backend_proc.terminate()
+                backend_proc.wait(timeout=3)
+            except Exception:
+                try:
+                    backend_proc.kill()
+                except Exception:
+                    pass
+        else:
+            print("[Launcher] Pre-existing backend server preserved.")
         sys.exit(0)
 
     window = webview.create_window(
@@ -87,7 +95,7 @@ def launch_pywebview(backend_proc: subprocess.Popen):
     window.events.closed += on_closed
     webview.start(debug=False)
 
-def launch_browser_fallback(backend_proc: subprocess.Popen):
+def launch_browser_fallback(backend_proc: Optional[subprocess.Popen]):
     # Try Chrome or Edge with --app mode for borderless PWA experience
     chrome_path = shutil.which("chrome") or r"C:\Program Files\Google\Chrome\Application\chrome.exe"
     edge_path = shutil.which("msedge") or r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
@@ -108,10 +116,16 @@ def launch_browser_fallback(backend_proc: subprocess.Popen):
     print(f"\n[Launcher] J.A.R.V.I.S. APEX is live at {SERVER_URL}")
     print("[Launcher] Press Ctrl+C in this console to terminate workstation.")
     try:
-        backend_proc.wait()
+        if backend_proc is not None:
+            backend_proc.wait()
+        else:
+            print("[Launcher] Pre-existing backend server detected. App is active.")
+            while True:
+                time.sleep(1)
     except KeyboardInterrupt:
         print("\n[Launcher] Shutting down...")
-        backend_proc.terminate()
+        if backend_proc is not None:
+            backend_proc.terminate()
 
 def main():
     print("=" * 65)

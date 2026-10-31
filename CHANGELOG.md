@@ -6,6 +6,56 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [2.1.1] - 2026-10-31
+
+### 🔒 API & WebSocket Authentication Enforcement
+- **Enforced:** Applied `verify_session_token` dependency to all sensitive REST endpoints across OS controls, pending action approvals, audit logs, persistent memory, paper trading, and visual workflows.
+- **Enforced:** Strict Origin validation and token checking for WebSocket connections with code 1008 rejection for untrusted origins or invalid credentials.
+- **Hardened:** Replaced predictable default session secret with dynamic high-entropy 32-byte secret generated in `data/.session_secret`; raises fatal `RuntimeError` on startup if secret is missing or insecure in production.
+- **Hardened:** Switched `DEBUG` setting default to `False`.
+- **Hardened:** Query-string token authorization strictly prohibited for ordinary REST endpoints (allowed solely on WebSocket handshake due to browser WebSocket API constraints).
+- **Hardened:** Secure frontend session initialization with automated `session_token` cookie and `X-JARVIS-Session` fetch interceptor in `frontend/app.js`.
+
+### 🎙️ Hardware Microphone & Screen Vision Privacy
+- **Fixed:** True runtime physical lifecycle control in `backend/local_wake_listener.py`. Microphone OFF physically stops and closes the active `sd.InputStream` and drains residual queues.
+- **Fixed:** Thread-safe listener synchronization preventing race conditions and duplicate microphone streams.
+- **Enforced:** Screen-vision kill switch systematically enforced across all capture entry points: `capture_desktop_image`, `analyze_screen_with_ai`, `detect_chart_patterns_and_overlays`, and `extract_screen_text_and_clipboard`.
+
+### 📦 Cryptographic Auto-Updater
+- **Added:** Pinned Ed25519 digital signature verification (`PINNED_UPDATE_PUBLIC_KEY_HEX`) verifying canonical JSON release manifests before parsing.
+- **Added:** Absolute ZIP-Slip path traversal defense with `SecurityError` during package extraction.
+- **Hardened:** HTTPS-only release checks with trusted origin whitelisting (`github.com`, `raw.githubusercontent.com`, `objects.githubusercontent.com`).
+- **Fixed:** Offline/network error returns explicit `UPDATE_CHECK_UNAVAILABLE` status instead of falsely claiming "up to date".
+- **Added:** Isolated staging extraction (`updates/staging/`), automatic pre-update backup snapshot creation (`updates/backup/`), and automatic rollback upon update failure.
+
+### 📈 Paper-Trading & Backtesting Execution Corrections
+- **Fixed:** Removed arbitrary ₹100.0 price fallback for simulated MARKET orders; requires positive price from live ticker or explicitly rejected.
+- **Added:** PENDING queue lifecycle for LIMIT and STOP_LOSS orders triggered by real tick evaluations (`evaluate_pending_orders_and_triggers`).
+- **Added:** Realistic execution friction: ₹20 flat brokerage fee and 0.05% execution slippage applied to paper orders.
+- **Fixed:** Dynamic SQLite migration adding `fee` and `notes` columns to `paper_orders` without data destruction.
+- **Fixed:** Reversible account reset creating an immutable snapshot in `paper_account_snapshots` before restoring initial balance.
+- **Fixed:** Strategy Lab next-bar open fill execution model (`candle[i+1]['open']`) eliminating bar-close look-ahead bias.
+- **Fixed:** Indicator warm-up preserved for out-of-sample evaluation (`eval_start_idx=split_idx`).
+- **Added:** Rolling walk-forward cross-validation alongside chronological holdout evaluation.
+
+### ⚙️ Workflow Engine Condition Safety
+- **Fixed:** Strict fail-closed execution on missing context fields (`SKIPPED_FAIL_CLOSED` or `SIMULATED_FAIL_CLOSED` in dry-run).
+- **Added:** Operator validation against `ALLOWED_OPERATORS` returning `VALIDATION_FAILED` on unsupported operators.
+- **Added:** Type-safe numeric and string comparison handling operand type mismatches gracefully.
+
+### 🪟 Windows Desktop Launcher & Health Center
+- **Fixed:** Safe process lifecycle management in `desktop_launcher.py`: gracefully handles pre-existing backend servers and avoids terminating `None` process handles.
+- **Fixed:** Sarvam AI health probe actually verified via authenticated HTTP requests rather than purely credential presence.
+- **Fixed:** OpenRouter reachability and authentication verified independently.
+- **Added:** Detailed status classification (`CONFIGURED`, `AUTHENTICATED`, `REACHABLE`, `DEGRADED`, `UNAVAILABLE`) with ISO timestamps.
+
+### 🧪 Automated Testing
+- **Added:** `tests/test_api_auth_integration.py` (6 integration tests for REST & WebSocket auth, origin validation, cookie & header parsing).
+- **Added:** `tests/test_v211_defects_regression.py` (12 regression tests verifying Ed25519 signatures, ZIP-slip defense, offline updater status, market price validation, pending limit lifecycle, reversible reset, next-bar open backtesting, fail-closed workflows, mic/screen privacy, and provider health states).
+- **Result:** Total automated tests increased to 47, with 100% pass rate.
+
+---
+
 ## [2.1.0] - 2026-10-31
 
 ### 🛡️ Security, Authentication & Safe OS Execution
