@@ -8,3 +8,4 @@ Provides safe, controlled, and programmatic access to Windows OS subsystems, sys
 2. Process & Window Management: Lists top-level GUI applications and active PIDs.
 3. Audio Subsystem: Controls master volume levels safely.
 4. Clipboard Interface: Reads plain-text clipboard contents safely.
+

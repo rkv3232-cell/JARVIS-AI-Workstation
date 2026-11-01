@@ -82,3 +82,4 @@ def test_skill_manager_registry_controls():
     assert ok is True
     skill = SkillRegistry.get_skill("custom_automation")
     assert skill["is_enabled"] is True
+

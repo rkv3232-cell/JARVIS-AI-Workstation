@@ -222,3 +222,4 @@ class BrowserOperator:
             "status": "ERROR",
             "error": res.error or "Failed to compile PDF report."
         }
+

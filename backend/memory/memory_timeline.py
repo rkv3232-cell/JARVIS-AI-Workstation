@@ -375,3 +375,4 @@ class MemoryTimelineManager:
             result_summary=f"Purged {count} memories from category '{category}'"
         )
         return count
+

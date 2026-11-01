@@ -476,3 +476,4 @@ async def memory_update_privacy_settings(req: MemoryPrivacySettingsRequest):
 async def memory_clear_category(req: ClearCategoryRequest):
     count = MemoryTimelineManager.clear_category(req.category)
     return {"status": "SUCCESS", "category": req.category, "cleared_count": count}
+

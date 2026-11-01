@@ -54,3 +54,4 @@ class SkillLoader:
                         print(f"[SkillLoader Warning]: Skipping invalid skill folder {item.name}: {errs}")
 
         return discovered
+

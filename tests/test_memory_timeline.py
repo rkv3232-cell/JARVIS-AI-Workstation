@@ -66,3 +66,4 @@ def test_memory_privacy_settings_controls():
     )
     settings_after = MemoryTimelineManager.get_privacy_settings()
     assert settings_after["recording_enabled"] is True
+

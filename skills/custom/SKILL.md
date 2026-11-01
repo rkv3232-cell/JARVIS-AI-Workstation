@@ -9,3 +9,4 @@ Serves as an extensible boilerplate for user-defined automations, domain-specifi
 3. Provide `SKILL.md` detailing purpose and parameters.
 4. If script-enabled, provide `scripts/main.py` that reads JSON from `sys.stdin` and outputs JSON to `sys.stdout`.
 5. Install or sync through the Skill Manager interface.
+

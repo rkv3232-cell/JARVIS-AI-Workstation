@@ -9,3 +9,4 @@ Generates publication-grade, compact research reports formatted specifically for
 - Prevent forced page breaks and isolated lines.
 - Dense data tables with 4-6pt cell padding.
 - Embeds running header and compact footer with page numbering.
+

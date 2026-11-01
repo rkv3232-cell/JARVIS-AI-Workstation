@@ -46,3 +46,4 @@ class SkillResult(BaseModel):
     output: Any = None
     error: Optional[str] = None
     stdout: Optional[str] = None
+

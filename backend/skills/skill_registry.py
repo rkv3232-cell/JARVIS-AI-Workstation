@@ -278,3 +278,4 @@ class SkillRegistry:
             history.append(d)
 
         return history
+

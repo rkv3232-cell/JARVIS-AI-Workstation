@@ -124,3 +124,4 @@ def test_browser_bookmarks_and_history():
     # 3. Delete Bookmark
     del_ok = BrowserEngine.delete_bookmark(bm["id"])
     assert del_ok is True
+

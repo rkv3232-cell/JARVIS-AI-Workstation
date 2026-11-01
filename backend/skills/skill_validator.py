@@ -119,3 +119,4 @@ class SkillValidator:
                     errors.extend(script_warnings)
 
         return len(errors) == 0, errors, manifest_data
+

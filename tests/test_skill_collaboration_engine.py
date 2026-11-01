@@ -55,3 +55,4 @@ def test_collaboration_pause_resume_cancel():
 
     CollaborationEngine.cancel_task(task_id)
     assert CollaborationEngine._cancel_flags.get(task_id) is True
+

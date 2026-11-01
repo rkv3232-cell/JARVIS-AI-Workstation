@@ -84,3 +84,4 @@ def test_sensitive_interactive_approval_flow():
     appr_ok, msg, act = CentralPermissionManager.approve_action(action_id, grant_persistence=False)
     assert appr_ok is True
     assert act["status"] == "approved"
+

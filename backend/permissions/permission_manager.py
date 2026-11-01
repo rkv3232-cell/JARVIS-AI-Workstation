@@ -318,3 +318,4 @@ class CentralPermissionManager:
     def list_pending_approvals(cls) -> List[Dict[str, Any]]:
         """Returns all currently pending interactive authorization requests."""
         return action_registry.list_pending()
+

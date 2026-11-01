@@ -11,3 +11,4 @@ __all__ = [
     "PermissionComponent",
     "SAFE_READ_RESOURCES"
 ]
+

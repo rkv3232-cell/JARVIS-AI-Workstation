@@ -294,3 +294,4 @@ class ActivityLogger:
                 pass
 
         return deleted_count
+

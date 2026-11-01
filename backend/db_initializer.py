@@ -232,3 +232,4 @@ def init_seven_components_db():
 if __name__ == "__main__":
     init_seven_components_db()
     print("Database initialization and migration completed successfully.")
+
